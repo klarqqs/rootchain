@@ -1,6 +1,6 @@
 /**
  * ROOTCHAIN authentication policy helpers (Supabase Auth).
- * Enforcement is OFF until VITE_SUPABASE_AUTH=true — keeps legacy deployments working.
+ * When Supabase is configured, route guards default ON unless `VITE_SUPABASE_AUTH=false`.
  */
 
 import { dbAvailable, supabase } from "@/database/client";
@@ -8,7 +8,7 @@ import type { Page } from "@/lib/nav";
 import type { AppProfileRow } from "@/database/types";
 
 function authFlag(): boolean {
-  return import.meta.env.VITE_SUPABASE_AUTH === "true";
+  return import.meta.env.VITE_SUPABASE_AUTH !== "false";
 }
 
 /** True when SPA should require Supabase session for guarded routes/actions. */
@@ -22,6 +22,7 @@ const ALWAYS_PUBLIC_PAGES = new Set<Page>([
   "signup",
   "forgot-password",
   "home",
+  "about",
   "help",
   "privacy",
   "terms",
@@ -82,6 +83,7 @@ export function consumeReturnPage(fallback: Page = "home"): Page {
     sessionStorage.removeItem(AUTH_POST_LOGIN_PAGE_KEY);
     const allowed = new Set<string>([
       "home",
+      "about",
       "marketplace",
       "verification",
       "dashboard",

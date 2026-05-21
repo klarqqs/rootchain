@@ -2,8 +2,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { AmbientBg } from "@/components/layout/ambient-bg";
 import { LoadingScreen } from "@/components/layout/loading-screen";
-import { Sidebar } from "@/components/layout/sidebar";
-import { TopBar } from "@/components/layout/topbar";
+import { DashboardLayout } from "@/layouts/DashboardLayout";
+import { MarketingLayout } from "@/layouts/MarketingLayout";
 import { InvestModal } from "@/components/modals/invest-modal";
 import { QRVerifyModal } from "@/components/modals/qr-verify-modal";
 import { TxDetailModal } from "@/components/modals/tx-detail-modal";
@@ -18,6 +18,7 @@ import { DashboardPage } from "@/pages/dashboard";
 import { FarmersPage } from "@/pages/farmers";
 import { HelpPage } from "@/pages/help";
 import { HomePage } from "@/pages/home";
+import { AboutPage } from "@/pages/about";
 import { MarketplacePage } from "@/pages/marketplace";
 import { FarmerRegisterPage } from "@/pages/farmer-register";
 import { PrivacyPage } from "@/pages/privacy";
@@ -38,12 +39,14 @@ import { OnboardingFlow } from "@/features/onboarding/onboarding-flow";
 import { AiAssistantDock } from "@/components/ai/ai-assistant-dock";
 import type { ProduceItem } from "@/data/produce";
 import type { Page } from "@/lib/nav";
+import { getAppLayoutMode } from "@/lib/layout-mode";
 import {
   isSupabaseAuthEnforced,
   routeRequiresAuthentication,
   routeAllowsFarmerIntake,
   stashReturnPage,
 } from "@/lib/auth-routes";
+import { walletConnectRequiresAccount } from "@/lib/platform-mode";
 import { useWallet } from "@/hooks/use-wallet";
 import { useIdentityBootstrap } from "@/hooks/use-identity-bootstrap";
 import { useHorizonSync } from "@/hooks/use-horizon-sync";
@@ -88,6 +91,8 @@ export default function App() {
   const recoveryRoutedRef = useRef(false);
   const sessionUid = session?.user?.id ?? "";
   const farmerGateKey = profile ? `${profile.id}:${profile.role}` : "";
+  const signedIn = Boolean(sessionUid);
+  const layoutMode = getAppLayoutMode(page, signedIn);
 
   useEffect(() => {
     if (!passwordRecovery) recoveryRoutedRef.current = false;
@@ -130,11 +135,34 @@ export default function App() {
   }, [page, hydration, sessionUid, farmerGateKey, profile]);
 
   useEffect(() => {
+    if (layoutMode === "marketing") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      const main = document.getElementById("main-scroll");
+      if (main) main.scrollTop = 0;
+      return;
+    }
     const main = document.getElementById("main-scroll");
     if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-  }, [page]);
+  }, [page, layoutMode]);
 
   const handleConnectClick = () => {
+    if (isConnected) setPage("wallet");
+    else setWalletOpen(true);
+  };
+
+  /** Marketing / landing: wallet only after account exists (when Supabase auth is active). */
+  const handleMarketingWalletConnect = () => {
+    if (walletConnectRequiresAccount() && !signedIn) {
+      useNotificationsStore.getState().push({
+        tone: "info",
+        title: "Create your account first",
+        description: "Sign up or log in, then connect Freighter to deposit and invest on-chain.",
+        duration: 7200,
+      });
+      stashReturnPage(page);
+      setPage("signup");
+      return;
+    }
     if (isConnected) setPage("wallet");
     else setWalletOpen(true);
   };
@@ -155,6 +183,62 @@ export default function App() {
     setPage("help");
   };
 
+  const pageSwitch = (
+    <>
+      {page === "home" && (
+        <HomePage setPage={setPage} />
+      )}
+      {page === "about" && <AboutPage setPage={setPage} />}
+      {page === "marketplace" && (
+        <MarketplacePage
+          onInvest={(it) => {
+            if (walletConnectRequiresAccount() && !signedIn) {
+              useNotificationsStore.getState().push({
+                tone: "info",
+                title: "Sign in to invest",
+                description: "Create an account, connect Freighter, then allocate capital on-chain.",
+                duration: 6800,
+              });
+              stashReturnPage("marketplace");
+              setPage("signup");
+              return;
+            }
+            setInvestItem(it);
+          }}
+          onVerify={(it) => setQrItem(it)}
+          setUploadOpen={setUploadOpen}
+        />
+      )}
+      {page === "farmers" && <FarmersPage />}
+      {page === "community" && <CommunityPage />}
+      {page === "help" && <HelpPage setPage={setPage} />}
+      {page === "privacy" && <PrivacyPage />}
+      {page === "terms" && <TermsPage />}
+      {page === "roadmap" && <RoadmapPage />}
+      {page === "launch" && <PilotLaunchPage />}
+      {page === "ecosystem" && <EcosystemPartnersPage />}
+      {page === "compliance" && <CompliancePage setPage={setPage} />}
+      {page === "login" && <LoginPage setPage={setPage} />}
+      {page === "signup" && <SignupPage setPage={setPage} />}
+      {page === "forgot-password" && <ForgotPasswordPage setPage={setPage} />}
+      {layoutMode === "dashboard" && page === "verification" && <VerificationPage />}
+      {layoutMode === "dashboard" && page === "dashboard" && (
+        <DashboardPage onTxClick={(hash) => setTxDetailHash(hash)} />
+      )}
+      {layoutMode === "dashboard" && page === "wallet" && (
+        <WalletPage
+          walletConnected={isConnected}
+          onConnectWallet={() => setWalletOpen(true)}
+          onTxClick={(hash) => setTxDetailHash(hash)}
+        />
+      )}
+      {layoutMode === "dashboard" && page === "register" && <FarmerRegisterPage />}
+      {layoutMode === "dashboard" && page === "insights" && <InsightsPage />}
+      {layoutMode === "dashboard" && page === "admin" && <AdminPage />}
+      {layoutMode === "dashboard" && page === "account" && <AccountPage setPage={setPage} />}
+    </>
+  );
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen text-white">
@@ -162,81 +246,47 @@ export default function App() {
         <AnimatePresence>{loading && <LoadingScreen />}</AnimatePresence>
         <DemoEnvironmentBanner />
 
-        <div className="flex">
-          <Sidebar
+        {layoutMode === "marketing" ? (
+          <MarketingLayout
             page={page}
             setPage={setPage}
-            open={sidebarOpen}
-            setOpen={setSidebarOpen}
-            onConnectWallet={() => setWalletOpen(true)}
-            onToolAction={handleSidebarToolAction}
-          />
-
-          <main id="main-scroll" className="flex-1 min-w-0 min-h-screen">
-            <TopBar
-              setSidebarOpen={setSidebarOpen}
-              onConnectWallet={handleConnectClick}
-              setPage={setPage}
-              page={page}
-            />
-            <div className="px-4 sm:px-6 lg:px-8 pt-6">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={page}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <ErrorBoundary key={`page-${page}`}>
-                    {page === "home" && (
-                      <HomePage
-                        setPage={setPage}
-                        onConnectWallet={() => setWalletOpen(true)}
-                        onInvest={(it) => setInvestItem(it)}
-                        onVerify={(it) => setQrItem(it)}
-                      />
-                    )}
-                    {page === "marketplace" && (
-                      <MarketplacePage
-                        onInvest={(it) => setInvestItem(it)}
-                        onVerify={(it) => setQrItem(it)}
-                        setUploadOpen={setUploadOpen}
-                      />
-                    )}
-                    {page === "farmers" && <FarmersPage />}
-                    {page === "verification" && <VerificationPage />}
-                    {page === "dashboard" && (
-                      <DashboardPage onTxClick={(hash) => setTxDetailHash(hash)} />
-                    )}
-                    {page === "wallet" && (
-                      <WalletPage
-                        walletConnected={isConnected}
-                        onConnectWallet={() => setWalletOpen(true)}
-                        onTxClick={(hash) => setTxDetailHash(hash)}
-                      />
-                    )}
-                    {page === "community" && <CommunityPage />}
-                    {page === "help" && <HelpPage setPage={setPage} />}
-                    {page === "register" && <FarmerRegisterPage />}
-                    {page === "privacy" && <PrivacyPage />}
-                    {page === "terms" && <TermsPage />}
-                    {page === "roadmap" && <RoadmapPage />}
-                    {page === "launch" && <PilotLaunchPage />}
-                    {page === "ecosystem" && <EcosystemPartnersPage />}
-                    {page === "insights" && <InsightsPage />}
-                    {page === "compliance" && <CompliancePage setPage={setPage} />}
-                    {page === "admin" && <AdminPage />}
-                    {page === "login" && <LoginPage setPage={setPage} />}
-                    {page === "signup" && <SignupPage setPage={setPage} />}
-                    {page === "forgot-password" && <ForgotPasswordPage setPage={setPage} />}
-                    {page === "account" && <AccountPage setPage={setPage} />}
-                  </ErrorBoundary>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </main>
-        </div>
+            onConnectWallet={handleMarketingWalletConnect}
+            signedIn={signedIn}
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={page}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ErrorBoundary key={`page-${page}`}>{pageSwitch}</ErrorBoundary>
+              </motion.div>
+            </AnimatePresence>
+          </MarketingLayout>
+        ) : (
+          <DashboardLayout
+            page={page}
+            setPage={setPage}
+            sidebarOpen={sidebarOpen}
+            setSidebarOpen={setSidebarOpen}
+            onConnectWallet={handleConnectClick}
+            onSidebarToolAction={handleSidebarToolAction}
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={page}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ErrorBoundary key={`page-${page}`}>{pageSwitch}</ErrorBoundary>
+              </motion.div>
+            </AnimatePresence>
+          </DashboardLayout>
+        )}
 
         <WalletModal
           open={walletOpen}
@@ -263,7 +313,9 @@ export default function App() {
           hash={txDetailHash}
         />
         <OnboardingFlow />
-        <AiAssistantDock page={page} onOpenWalletModal={() => setWalletOpen(true)} />
+        {layoutMode === "dashboard" && (
+          <AiAssistantDock page={page} onOpenWalletModal={() => setWalletOpen(true)} />
+        )}
         <Toaster />
       </div>
     </ErrorBoundary>

@@ -12,6 +12,8 @@ import { useWalletStore } from "@/store/wallet.store";
 import { useNotificationsStore } from "@/store/notifications.store";
 import { walletService } from "@/services";
 import { userService } from "@/database";
+import { updateAppProfile } from "@/services/auth-session.service";
+import { useIdentityStore } from "@/store/identity.store";
 import { startRealtime, stopRealtime } from "@/realtime";
 import type { WalletProviderId } from "@/types/wallet";
 import { truncateAddr } from "@/lib/utils";
@@ -83,6 +85,12 @@ export function useWallet() {
       userService.upsertUser(res.value.account.publicKey).catch(() => {
         // Non-fatal — DB might not be configured.
       });
+      const uid = useIdentityStore.getState().session?.user?.id;
+      if (uid) {
+        void updateAppProfile(uid, { wallet_public_key: res.value.account.publicKey }).catch(() => {
+          /* profile row may still be provisioning */
+        });
+      }
       pushToast({
         tone: "success",
         title: `${res.value.account.label ?? provider} connected`,

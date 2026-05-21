@@ -5,6 +5,7 @@ import { Btn } from "@/components/ui/button";
 import { Glass } from "@/components/ui/glass";
 import { Pill } from "@/components/ui/pill";
 import { dbAvailable } from "@/database/client";
+import { AuthSetupRequired } from "@/components/auth/auth-setup-required";
 import type { Page } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { requestPasswordReset } from "@/services/auth-session.service";
@@ -22,10 +23,9 @@ export function ForgotPasswordPage({ setPage }: ForgotPasswordPageProps) {
 
   if (!dbAvailable) {
     return (
-      <Glass className="p-10 max-w-lg mx-auto text-center space-y-3">
-        <MailCheck className="w-7 h-7 text-amber-300 mx-auto" />
-        <p className="text-sm text-slate-400">Supabase backend not configured.</p>
-      </Glass>
+      <div className="pb-20">
+        <AuthSetupRequired title="Password reset unavailable" />
+      </div>
     );
   }
 

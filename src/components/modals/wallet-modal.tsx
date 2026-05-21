@@ -14,6 +14,7 @@ import {
   activeIsPublicNetwork,
   activeNetworkLabel,
 } from "@/lib/stellar/config";
+import { requiresRealLedgerSettlement } from "@/lib/platform-mode";
 import { useStellarRuntimeStore } from "@/store/stellar-runtime.store";
 import type { StellarNetwork } from "@/types/wallet";
 
@@ -32,6 +33,8 @@ export function WalletModal({ open, onClose, onConnect }: WalletModalProps) {
   const { connect: doConnect, account } = useWallet();
   const userNetworkOverride = useStellarRuntimeStore((s) => s.userNetworkOverride);
   const setUserNetworkOverride = useStellarRuntimeStore((s) => s.setUserNetworkOverride);
+  const realOnly = requiresRealLedgerSettlement();
+  const providers = realOnly ? WALLET_PROVIDERS.filter((p) => p.id === "freighter") : WALLET_PROVIDERS;
 
   const connect = async (w: WalletProvider) => {
     setProvider(w);
@@ -92,8 +95,9 @@ export function WalletModal({ open, onClose, onConnect }: WalletModalProps) {
                         Link your wallet.
                       </h3>
                       <p className="text-sm text-slate-500 mt-1">
-                        Freighter signs real Horizon operations aligned to whichever ledger ROOTCHAIN routes (see ledger control below).
-                        Other providers simulate flows for onboarding.
+                        {realOnly
+                          ? "Freighter is required for deposits and investments — settlements broadcast to Stellar with funds you control."
+                          : "Freighter signs real Horizon operations aligned to whichever ledger ROOTCHAIN routes. Other providers simulate flows for onboarding."}
                       </p>
                     </div>
                     <button
@@ -106,7 +110,7 @@ export function WalletModal({ open, onClose, onConnect }: WalletModalProps) {
                   </div>
 
                   <div className="space-y-2 mt-4">
-                    {WALLET_PROVIDERS.map((w) => (
+                    {providers.map((w) => (
                       <button
                         key={w.id}
                         onClick={() => connect(w)}

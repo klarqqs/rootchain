@@ -22,6 +22,8 @@ import {
 } from "@/tokenization/harvest-metrics";
 import { InvestorDisclaimerStripe } from "@/features/compliance/investor-disclaimer-stripe";
 import { isSupabaseAuthEnforced } from "@/lib/auth-routes";
+import { requiresRealLedgerSettlement } from "@/lib/platform-mode";
+import { activeIsPublicNetwork } from "@/lib/stellar/config";
 import { useIdentityStore } from "@/store/identity.store";
 import { useNotificationsStore } from "@/store/notifications.store";
 
@@ -46,6 +48,7 @@ export function InvestModal({ open, onClose, item, onTxComplete }: InvestModalPr
   const usdcBalance = usdc?.amount ?? 0;
   const addInvestment = usePortfolioStore((s) => s.addInvestment);
   const isReal = isConnected && canExecuteReal();
+  const realSettlementRequired = requiresRealLedgerSettlement();
   const xlmEquivalent = isReal ? (amount / STELLAR_RATE).toFixed(4) : null;
   const ledgerXlmRequired = amount / STELLAR_RATE;
 
@@ -70,7 +73,14 @@ export function InvestModal({ open, onClose, item, onTxComplete }: InvestModalPr
   const submit = async () => {
     if (!item) return;
     if (!isConnected) {
-      setErrorMessage("Connect your wallet before investing.");
+      setErrorMessage("Connect Freighter before investing.");
+      setStage("error");
+      return;
+    }
+    if (realSettlementRequired && !canExecuteReal()) {
+      setErrorMessage(
+        "Production mode requires Freighter for on-chain settlement. Connect Freighter (not a demo wallet provider).",
+      );
       setStage("error");
       return;
     }
@@ -88,7 +98,9 @@ export function InvestModal({ open, onClose, item, onTxComplete }: InvestModalPr
     if (insufficient) {
       setErrorMessage(
         isReal
-          ? `Not enough lumens yet (need roughly ${ledgerXlmRequired.toFixed(4)} XLM + fees · available ${xlmBal.toFixed(4)} XLM). Tap Friendbot from Wallet or deposit test XLM before investing.`
+          ? activeIsPublicNetwork()
+            ? `Not enough lumens (need ~${ledgerXlmRequired.toFixed(4)} XLM + fees · available ${xlmBal.toFixed(4)} XLM). Fund your Freighter account on the public network before investing.`
+            : `Not enough lumens yet (need roughly ${ledgerXlmRequired.toFixed(4)} XLM + fees · available ${xlmBal.toFixed(4)} XLM). Use Friendbot on testnet or deposit XLM before investing.`
           : `Insufficient USDC for demo balances. Available: ${usdcBalance.toFixed(2)}.`,
       );
       setStage("error");
@@ -174,7 +186,16 @@ export function InvestModal({ open, onClose, item, onTxComplete }: InvestModalPr
                   {!isConnected && (
                     <div className="mb-4 p-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] text-xs text-amber-200 flex items-start gap-2">
                       <Wallet className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                      <span>Connect a wallet first — this will simulate the transfer until you do.</span>
+                      <span>
+                        {realSettlementRequired
+                          ? "Connect Freighter to broadcast a real escrow payment on Stellar."
+                          : "Connect Freighter for live Horizon settlement, or continue without a wallet to run a simulated allocation."}
+                      </span>
+                    </div>
+                  )}
+                  {isConnected && !isReal && realSettlementRequired && (
+                    <div className="mb-4 p-3 rounded-xl border border-rose-500/30 bg-rose-500/[0.06] text-xs text-rose-200">
+                      This build requires Freighter for real money movement. Disconnect and reconnect with Freighter.
                     </div>
                   )}
 

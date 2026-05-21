@@ -26,6 +26,7 @@ import {
   LogIn,
   UserRound,
   Wheat,
+  Info,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Glass } from "@/components/ui/glass";
@@ -67,6 +68,7 @@ const PRIMARY: NavItem[] = [
 
 const RESOURCE_LINKS: { id: Page; label: string; icon: LucideIcon }[] = [
   { id: "help", label: "Help & FAQ", icon: HelpCircle },
+  { id: "about", label: "About", icon: Info },
   { id: "login", label: "Sign in", icon: LogIn },
   { id: "signup", label: "Create account", icon: ClipboardPenLine },
   { id: "account", label: "My profile", icon: UserRound },

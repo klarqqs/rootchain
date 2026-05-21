@@ -1,5 +1,6 @@
 export type Page =
   | "home"
+  | "about"
   | "marketplace"
   | "verification"
   | "dashboard"
@@ -23,6 +24,10 @@ export type Page =
 
 export const PAGE_META: Record<Page, { title: string; subtitle: string }> = {
   home: { title: "Overview", subtitle: "Premium AgriFi marketplace built on-chain" },
+  about: {
+    title: "About ROOTCHAIN",
+    subtitle: "African agriculture, global capital, and Stellar-native transparency",
+  },
   marketplace: { title: "Marketplace", subtitle: "Live agricultural investment opportunities" },
   verification: { title: "Blockchain Verification", subtitle: "Immutable proof of produce ownership" },
   dashboard: { title: "Portfolio Analytics", subtitle: "Track your harvest investments in real-time" },

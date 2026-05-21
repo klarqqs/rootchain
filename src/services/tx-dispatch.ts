@@ -9,11 +9,13 @@
  * Swapping simulation for real is a one-line env change when mainnet launches.
  */
 
-import type { TxKind, TxPaymentPresentation, TxRecord } from "@/types/transaction";
+import type { TxKind, TxPaymentPresentation } from "@/types/transaction";
 import { simulateTx, type SimulateTxInput } from "./transaction-engine";
 import { executeRealTx, USDC_XLM_RATE, type RealTxInput } from "@/lib/stellar/tx-executor";
 import { XLM_USD_PRICE_ESTIMATE } from "@/lib/stellar/account";
 import { useWalletStore } from "@/store/wallet.store";
+import { requiresRealLedgerSettlement } from "@/lib/platform-mode";
+import type { TxRecord } from "@/types/transaction";
 
 export type DispatchListener = (record: TxRecord) => void;
 
@@ -47,11 +49,48 @@ export function canExecuteReal(): boolean {
  * Returns immediately with a handle containing the (provisional) hash
  * and a `finalized` promise that resolves to the settled TxRecord.
  */
+function settlementBlockedHandle(kind: TxKind, amount: number, message: string): DispatchHandle {
+  const failed: TxRecord = {
+    hash: "blocked",
+    kind,
+    status: "failed",
+    amount,
+    fee: 0,
+    confirmations: 0,
+    memo: message,
+    createdAt: Date.now(),
+    settledAt: Date.now(),
+  };
+  return {
+    hash: failed.hash,
+    isReal: false,
+    cancel: () => undefined,
+    finalized: Promise.resolve(failed),
+  };
+}
+
 export function dispatchTx(
   input: DispatchInput,
   onUpdate?: DispatchListener,
 ): DispatchHandle {
   const isReal = canExecuteReal();
+
+  if (requiresRealLedgerSettlement() && !isReal) {
+    const msg =
+      "Connect Freighter on the same ledger as ROOTCHAIN to move real funds. Simulated wallet providers are disabled in production mode.";
+    onUpdate?.({
+      hash: "blocked",
+      kind: input.kind,
+      status: "failed",
+      amount: input.amount,
+      fee: 0,
+      confirmations: 0,
+      memo: msg,
+      createdAt: Date.now(),
+      settledAt: Date.now(),
+    });
+    return settlementBlockedHandle(input.kind, input.amount, msg);
+  }
 
   if (isReal) {
     return dispatchRealTx(input, onUpdate);

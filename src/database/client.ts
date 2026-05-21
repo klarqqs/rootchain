@@ -7,13 +7,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import { hybridSupabaseAuthStorage } from "./auth-storage";
+import { isSupabaseConfigured } from "@/lib/supabase-env";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-export const supabase: SupabaseClient<Database> | null =
-  url && key && !url.startsWith("https://your-") && !key.startsWith("your-")
-    ? createClient<Database>(url, key, {
+export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured()
+  ? createClient<Database>(url!.trim(), key!.trim(), {
         auth: {
           storage: hybridSupabaseAuthStorage,
           persistSession: true,
@@ -22,6 +22,6 @@ export const supabase: SupabaseClient<Database> | null =
           flowType: "pkce",
         },
       })
-    : null;
+  : null;
 
 export const dbAvailable = supabase !== null;

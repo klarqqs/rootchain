@@ -61,7 +61,9 @@ export interface EmailSignUpInput {
   email: string;
   password: string;
   fullName: string;
-  role: AppProfileRow["role"];
+  role: Exclude<AppProfileRow["role"], "admin">;
+  /** Merged into `options.data` (Supabase `raw_user_meta_data`). Use string values only. */
+  profileMeta?: Record<string, string | boolean>;
 }
 
 export async function signUpWithEmail(
@@ -69,19 +71,89 @@ export async function signUpWithEmail(
 ): Promise<{ user: User | null; session: Session | null }> {
   configureAuthPersistMode(true);
   const sb = getSupabase();
+  const meta: Record<string, unknown> = {
+    role: input.role,
+    full_name: input.fullName.trim(),
+    ...(input.profileMeta ?? {}),
+  };
   const { data, error } = await sb.auth.signUp({
     email: input.email.trim(),
     password: input.password,
     options: {
       emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
-      data: {
-        role: input.role,
-        full_name: input.fullName.trim(),
-      },
+      data: meta,
     },
   });
   if (error) throw error;
   return { user: data.user ?? null, session: data.session ?? null };
+}
+
+export interface EmailOtpSignUpInput {
+  email: string;
+  role: Exclude<AppProfileRow["role"], "admin">;
+  fullName: string;
+  profileMeta?: Record<string, string | boolean>;
+}
+
+/** Sends a six-digit email OTP and prepares user creation on verify (metadata → `raw_user_meta_data`). */
+export async function sendEmailSignUpOtp(input: EmailOtpSignUpInput): Promise<void> {
+  configureAuthPersistMode(true);
+  const sb = getSupabase();
+  const meta: Record<string, unknown> = {
+    role: input.role,
+    full_name: input.fullName.trim(),
+    ...(input.profileMeta ?? {}),
+  };
+  const { error } = await sb.auth.signInWithOtp({
+    email: input.email.trim(),
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+      data: meta,
+    },
+  });
+  if (error) throw error;
+}
+
+/** Existing users only — does not create accounts. */
+export async function sendEmailSignInOtp(email: string, rememberDevice: boolean): Promise<void> {
+  configureAuthPersistMode(rememberDevice);
+  const sb = getSupabase();
+  const { error } = await sb.auth.signInWithOtp({
+    email: email.trim(),
+    options: {
+      shouldCreateUser: false,
+      emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+    },
+  });
+  if (error) throw error;
+}
+
+export async function verifyEmailOtp(
+  email: string,
+  token: string,
+  rememberDevice: boolean,
+): Promise<{ session: Session }> {
+  configureAuthPersistMode(rememberDevice);
+  const sb = getSupabase();
+  const { data, error } = await sb.auth.verifyOtp({
+    email: email.trim(),
+    token: token.replace(/\s/g, ""),
+    type: "email",
+  });
+  if (error) throw error;
+  if (!data.session) {
+    throw new Error(
+      "Email sign-in did not return a session. Enable Email OTP in Supabase Auth and confirm SMTP is working.",
+    );
+  }
+  return { session: data.session };
+}
+
+export async function setPasswordForCurrentUser(password: string): Promise<void> {
+  const sb = getSupabase();
+  const { error } = await sb.auth.updateUser({ password });
+  if (error) throw error;
 }
 
 export async function signInWithEmail(

@@ -4,28 +4,12 @@ import { Glass } from "@/components/ui/glass";
 import { Pill } from "@/components/ui/pill";
 import { Btn } from "@/components/ui/button";
 import type { Page } from "@/lib/nav";
+import { PUBLIC_FAQ_ITEMS } from "@/data/public-faq";
 import { useNotificationPrefsStore } from "@/store/notification-prefs.store";
 import { useOnboardingStore } from "@/store/onboarding.store";
 import { requestDesktopNotificationPermission } from "@/services/notification-delivery.service";
 
-const FAQ_ITEMS = [
-  {
-    q: "Is this mainnet?",
-    a: "No. ROOTCHAIN runs on Stellar testnet for hackathon and accelerator demos. Custody rails on mainnet require legal + custody partners.",
-  },
-  {
-    q: "Where do deposits go?",
-    a: "When Freighter executes a transfer, escrow receives test XLM equivalents. Investor ownership is mirrored in your portfolio + optional Supabase indexing.",
-  },
-  {
-    q: "Are returns guaranteed?",
-    a: "No. Projections are illustrative. Always treat demo environments as simulations until independent audits publish.",
-  },
-  {
-    q: "How do escalations work?",
-    a: "Use the Farmer intake form for registration. Operators can track submissions in Admin Console once VITE_ADMIN_TOKEN is configured.",
-  },
-];
+const FAQ_ITEMS = PUBLIC_FAQ_ITEMS;
 
 export function HelpPage({ setPage }: { setPage: (page: Page) => void }) {
   const desktop = useNotificationPrefsStore((s) => s.desktop);

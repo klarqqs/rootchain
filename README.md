@@ -38,6 +38,59 @@ Type-check on its own: `npx tsc -b`.
 
 ---
 
+## Supabase Auth (sign in / sign up)
+
+1. Create a Supabase project and copy **Project URL** + **anon public** key into `.env` as `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see `.env.example`).
+2. Run the SQL in `supabase/migrations/001_app_profiles.sql` in the Supabase SQL editor (profiles + trigger on `auth.users`).
+3. **Auth → URL configuration:** add `http://localhost:5173` (and your production origin) to **Redirect URLs** and **Site URL** as needed for OAuth return and auth callbacks.
+4. **Google OAuth (optional):** enable Google provider; redirect URI must match your SPA origin.
+5. `VITE_SUPABASE_AUTH` defaults to **on** when unset (`!== "false"`). Set `VITE_SUPABASE_AUTH=false` only if you need the old “no session gates” demo.
+
+### Email OTP (signup + sign-in)
+
+The app uses **email six-digit codes** for new accounts (`signInWithOtp` + `verifyOtp`), then saves the password you chose in the signup wizard. Sign-in supports **password** or **email code** on the login screen.
+
+**Dashboard checklist** (SMTP, OTP toggle, URLs): see [supabase/AUTH_EMAIL_OTP.md](supabase/AUTH_EMAIL_OTP.md).
+
+**If auth “does nothing” or codes never arrive**
+
+- Confirm `.env` has real Supabase URL/key (not `https://your-project…`) and restart Vite.
+- Enable **Email OTP** in Supabase Auth and configure **custom SMTP** (Supabase default mail is rate-limited and often filtered).
+- Match **Site URL** / **Redirect URLs** to every origin you use (localhost + production).
+
+Restart `npm run dev` after changing `.env`.
+
+A starter `.env` is created locally from `.env.example` on first setup — you must paste **your** Supabase URL and anon key (the placeholder values will show “Cannot register” until replaced).
+
+**Wallet on landing:** visitors can browse marketing pages without a wallet; **Connect wallet** on the landing nav routes to **sign up** first when Supabase auth is enabled. After sign-in, Freighter connects for real Horizon settlement.
+
+---
+
+## Stellar mainnet (phased rollout)
+
+The UI can talk to **Stellar Public (mainnet)** only when **`VITE_MAINNET_ROUTING_ENABLED=true`**. Without it, choosing “Public” in the wallet ledger picker is **clamped back to testnet** (`src/lib/stellar/effective-network.ts`).
+
+**Minimum env set for public ledger**
+
+| Variable | Purpose |
+| -------- | ------- |
+| `VITE_MAINNET_ROUTING_ENABLED=true` | Allow `PUBLIC` / Horizon main routing. |
+| `VITE_STELLAR_NETWORK=PUBLIC` | Default build network (optional if users pick ledger in UI). |
+| `VITE_STELLAR_PUBLIC_HORIZON_URL` | Override Horizon public URL if needed (default `https://horizon.stellar.org`). |
+| `VITE_USDC_ISSUER_MAINNET` / `VITE_RC_ISSUER_MAINNET` | Real issuers for USDC and harvest-share style assets (or `VITE_STELLAR_PUBLIC_USDC_ISSUER` / `VITE_STELLAR_PUBLIC_RC_ISSUER`). |
+| `VITE_STELLAR_SOROBAN_RPC_PUBLIC` | Soroban RPC when not on testnet (see `.env.example`). |
+
+**Operational**
+
+- Fund and secure **platform / escrow** keys referenced in env; never commit secrets.
+- Match **Freighter** (or other wallets) to the same network passphrase as the app.
+- **Friendbot** is testnet-only; the app hides free-XLM prompts on public network.
+- Marketing FAQ copy switches when `VITE_MAINNET_ROUTING_ENABLED=true` (`src/data/public-faq.ts`).
+
+Do not commit production keys; use your host’s secret store for CI/CD.
+
+---
+
 ## Folder map
 
 ```
@@ -216,8 +269,7 @@ src/
   key, and pulls live balances from Horizon.
 - **Other providers** (Albedo, xBull, WalletConnect, Ledger) — connect through
   the same service interface but stay simulated for now (UI/UX identical).
-- **Refusal of mainnet** — `lib/stellar/config.ts` forces testnet and warns if
-  someone overrides the env. All explorer links route to Stellar Expert testnet.
+- **Phased mainnet** — default pilots stay on testnet; `VITE_MAINNET_ROUTING_ENABLED` plus issuer envs unlock Stellar Public routing (`lib/stellar/effective-network.ts`). Explorer links follow the active ledger.
 - **Transaction builder** (`tx-builder.ts`) — produces real Stellar XDR for
   `payment` and `changeTrust`. Phase 2 doesn't broadcast yet; Phase 3 will plug
   Freighter signing + Horizon submission into the same call sites.

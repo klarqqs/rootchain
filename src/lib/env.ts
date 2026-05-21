@@ -4,6 +4,7 @@
  */
 
 import { MAINNET_ROUTING_ENABLED } from "@/lib/stellar/effective-network";
+import { isSupabaseConfigured } from "@/lib/supabase-env";
 
 const network = import.meta.env.VITE_STELLAR_NETWORK ?? "TESTNET";
 
@@ -18,10 +19,7 @@ export const publicEnv = {
     import.meta.env.VITE_STELLAR_HORIZON_URL ??
     "https://horizon-testnet.stellar.org",
   adminTokenConfigured: Boolean(import.meta.env.VITE_ADMIN_TOKEN?.length),
-  supabaseConfigured: Boolean(
-    import.meta.env.VITE_SUPABASE_URL &&
-      import.meta.env.VITE_SUPABASE_URL !== "https://your-project.supabase.co",
-  ),
+  supabaseConfigured: isSupabaseConfigured(),
   /** HTTPS URL of an OpenAI-compatible or custom LLM **gateway** — never put provider API keys in Vite. */
   aiChatGatewayConfigured: Boolean(
     typeof import.meta.env.VITE_AI_CHAT_URL === "string" &&

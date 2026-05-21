@@ -22,7 +22,7 @@ import { Pill } from "@/components/ui/pill";
 import { useWallet } from "@/hooks/use-wallet";
 import { transactionService } from "@/services";
 import { canExecuteReal } from "@/services/tx-dispatch";
-import { explorerTxUrl } from "@/lib/stellar/config";
+import { explorerTxUrl, activeIsPublicNetwork } from "@/lib/stellar/config";
 import { USDC_XLM_RATE } from "@/lib/stellar/tx-executor";
 import { shortHash } from "@/utils/hash";
 import type { TxPaymentPresentation, TxRecord } from "@/types/transaction";
@@ -287,7 +287,7 @@ export function SendModal({ open, action, onClose, onTxComplete }: SendModalProp
                           Amount exceeds what this wallet can broadcast right now (include fees + reserves).
                         </div>
                       )}
-                      {/* Quick amounts — safe testnet pacing */}
+                      {/* Quick amount presets — use small amounts on public network */}
                       <div className="flex gap-1.5 mt-2 flex-wrap">
                         {(sendPresentation === "native_xlm" ? [1, 2, 5, 10] : [5, 10, 25, 50]).map((v) => (
                           <button
@@ -321,7 +321,9 @@ export function SendModal({ open, action, onClose, onTxComplete }: SendModalProp
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Settlement</span>
-                        <span className="font-bold text-white">&lt;5s median on testnet</span>
+                        <span className="font-bold text-white">
+                          {activeIsPublicNetwork() ? "&lt;5s median on Stellar" : "&lt;5s median on testnet"}
+                        </span>
                       </div>
                     </Glass>
 

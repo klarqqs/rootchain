@@ -30,7 +30,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useFriendbot } from "@/hooks/use-friendbot";
 import { useTrustline } from "@/hooks/use-trustline";
 import { useTransactionsStore } from "@/store/transactions.store";
-import { explorerAccountUrl, activeNetworkLabel, activeIsTestnet, explorerTxUrl } from "@/lib/stellar/config";
+import { explorerAccountUrl, activeNetworkLabel, activeIsTestnet, activeIsPublicNetwork, explorerTxUrl } from "@/lib/stellar/config";
 import { canExecuteReal } from "@/services/tx-dispatch";
 import { cn, formatUsd, truncateAddr } from "@/lib/utils";
 import type { TxRecord } from "@/types/transaction";
@@ -195,11 +195,10 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
                 </a>
               </div>
 
-              {/* Phase 3 banners */}
-              {activeIsTestnet() && isFreighter && (
+              {/* Phase 3 banners — trustline on any live ledger; Friendbot only on testnet */}
+              {isFreighter && (activeIsTestnet() || activeIsPublicNetwork()) && (
                 <div className="mt-4 space-y-2">
-                  {/* Friendbot */}
-                  {totalUsd < 5 && (
+                  {activeIsTestnet() && totalUsd < 5 && (
                     <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.06]">
                       <div className="text-xs text-amber-200 flex items-center gap-2">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -240,11 +239,12 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
                       <span className="text-[11px] text-lime-300 font-bold">USDC trustline active</span>
                     </div>
                   )}
-                  {/* Real Stellar badge */}
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-violet-500/20 bg-violet-500/[0.04]">
                     <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
                     <span className="text-[11px] text-violet-300 font-bold">
-                      Real Stellar transactions active · Testnet
+                      {activeIsPublicNetwork()
+                        ? "Public network · real fees and assets — verify every signature in Freighter."
+                        : "Real Stellar transactions active · Testnet"}
                     </span>
                   </div>
                 </div>
