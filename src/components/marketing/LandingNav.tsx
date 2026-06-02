@@ -6,6 +6,7 @@ import { cn, truncateAddr } from "@/lib/utils";
 import type { Page } from "@/lib/nav";
 import { useWallet } from "@/hooks/use-wallet";
 import { walletConnectRequiresAccount } from "@/lib/platform-mode";
+import { isSupabaseAuthEnforced } from "@/lib/auth-routes";
 import type { LandingHomeSectionId } from "@/lib/landing-section-ids";
 import { useLandingHomeScroll } from "@/components/marketing/landing-home-scroll-context";
 
@@ -16,6 +17,8 @@ export interface LandingNavProps {
   /** Opens persona chooser (investor vs farmer) before signup. */
   requestGetStarted: () => void;
   signedIn: boolean;
+  /** When false, hide login/signup and treat Get started as open app. */
+  authEnforced?: boolean;
 }
 
 type NavKey = "platform" | "community" | "how" | "faq";
@@ -33,7 +36,7 @@ function scrollToSection(id: string) {
   });
 }
 
-export function LandingNav({ page, setPage, onConnectWallet, requestGetStarted, signedIn }: LandingNavProps) {
+export function LandingNav({ page, setPage, onConnectWallet, requestGetStarted, signedIn, authEnforced = isSupabaseAuthEnforced() }: LandingNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isConnected, account } = useWallet();
   const { activeSection } = useLandingHomeScroll();
@@ -143,15 +146,28 @@ export function LandingNav({ page, setPage, onConnectWallet, requestGetStarted, 
               <Wallet className="w-4 h-4 text-emerald-400/90" />
               {walletLabel}
             </button>
-            <Btn variant="ghost" size="sm" className="hidden md:inline-flex" onClick={() => setPage("login")}>
-              Log in
-            </Btn>
-            <Btn variant="primary" size="sm" className="hidden sm:inline-flex" onClick={requestGetStarted}>
-              Get started
-            </Btn>
-            <Btn variant="primary" size="sm" className="sm:hidden px-3" onClick={requestGetStarted}>
-              Start
-            </Btn>
+            {authEnforced ? (
+              <>
+                <Btn variant="ghost" size="sm" className="hidden md:inline-flex" onClick={() => setPage("login")}>
+                  Log in
+                </Btn>
+                <Btn variant="primary" size="sm" className="hidden sm:inline-flex" onClick={requestGetStarted}>
+                  Get started
+                </Btn>
+                <Btn variant="primary" size="sm" className="sm:hidden px-3" onClick={requestGetStarted}>
+                  Start
+                </Btn>
+              </>
+            ) : (
+              <>
+                <Btn variant="primary" size="sm" className="hidden sm:inline-flex" onClick={requestGetStarted}>
+                  Enter app
+                </Btn>
+                <Btn variant="primary" size="sm" className="sm:hidden px-3" onClick={requestGetStarted}>
+                  Enter
+                </Btn>
+              </>
+            )}
 
             <button
               type="button"
@@ -203,19 +219,34 @@ export function LandingNav({ page, setPage, onConnectWallet, requestGetStarted, 
                 Marketplace
               </button>
               <div className="flex gap-2 pt-3 mt-2 border-t border-white/[0.06]">
-                <Btn variant="outline" className="flex-1" onClick={() => { setMobileOpen(false); setPage("login"); }}>
-                  Log in
-                </Btn>
-                <Btn
-                  variant="primary"
-                  className="flex-1"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    requestGetStarted();
-                  }}
-                >
-                  Get started
-                </Btn>
+                {authEnforced ? (
+                  <>
+                    <Btn variant="outline" className="flex-1" onClick={() => { setMobileOpen(false); setPage("login"); }}>
+                      Log in
+                    </Btn>
+                    <Btn
+                      variant="primary"
+                      className="flex-1"
+                      onClick={() => {
+                        setMobileOpen(false);
+                        requestGetStarted();
+                      }}
+                    >
+                      Get started
+                    </Btn>
+                  </>
+                ) : (
+                  <Btn
+                    variant="primary"
+                    className="flex-1"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      requestGetStarted();
+                    }}
+                  >
+                    Enter app
+                  </Btn>
+                )}
               </div>
             </div>
           </motion.div>

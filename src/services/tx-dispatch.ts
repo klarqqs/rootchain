@@ -1,27 +1,22 @@
 /**
- * Transaction dispatch — Phase 3's routing layer.
+ * Transaction dispatch — real Stellar ledger only.
  *
- * Decision matrix:
- *   • Freighter connected → executeRealTx() → Stellar testnet
- *   • Any other provider  → simulateTx()    → local simulation (same UX)
- *
- * Both paths converge on the TxRecord lifecycle, so the UI never changes.
- * Swapping simulation for real is a one-line env change when mainnet launches.
+ * Requires a connected Freighter or LOBSTR wallet. No simulated balances or
+ * fake transaction hashes are generated.
  */
 
 import type { TxKind, TxPaymentPresentation } from "@/types/transaction";
-import { simulateTx, type SimulateTxInput } from "./transaction-engine";
 import { executeRealTx, USDC_XLM_RATE, type RealTxInput } from "@/lib/stellar/tx-executor";
 import { XLM_USD_PRICE_ESTIMATE } from "@/lib/stellar/account";
+import { activeIsPublicNetwork } from "@/lib/stellar/effective-network";
 import { useWalletStore } from "@/store/wallet.store";
-import { requiresRealLedgerSettlement } from "@/lib/platform-mode";
+import { isRealSigningProvider } from "@/lib/stellar/wallet-signer";
 import type { TxRecord } from "@/types/transaction";
 
 export type DispatchListener = (record: TxRecord) => void;
 
 export interface DispatchInput {
   kind: TxKind;
-  /** Primary amount: USD notional (invest / deposit) or native XLM (peer send). */
   amount: number;
   paymentPresentation?: TxPaymentPresentation;
   produceId?: string;
@@ -38,17 +33,11 @@ export interface DispatchHandle {
   isReal: boolean;
 }
 
-/** Determine if the currently connected wallet supports real Stellar txs. */
 export function canExecuteReal(): boolean {
   const { status, account } = useWalletStore.getState();
-  return status === "connected" && account?.provider === "freighter";
+  return status === "connected" && !!account && isRealSigningProvider(account.provider);
 }
 
-/**
- * Dispatch a transaction through the appropriate path.
- * Returns immediately with a handle containing the (provisional) hash
- * and a `finalized` promise that resolves to the settled TxRecord.
- */
 function settlementBlockedHandle(kind: TxKind, amount: number, message: string): DispatchHandle {
   const failed: TxRecord = {
     hash: "blocked",
@@ -69,15 +58,9 @@ function settlementBlockedHandle(kind: TxKind, amount: number, message: string):
   };
 }
 
-export function dispatchTx(
-  input: DispatchInput,
-  onUpdate?: DispatchListener,
-): DispatchHandle {
-  const isReal = canExecuteReal();
-
-  if (requiresRealLedgerSettlement() && !isReal) {
-    const msg =
-      "Connect Freighter on the same ledger as ROOTCHAIN to move real funds. Simulated wallet providers are disabled in production mode.";
+export function dispatchTx(input: DispatchInput, onUpdate?: DispatchListener): DispatchHandle {
+  if (!canExecuteReal()) {
+    const msg = "Connect Freighter or LOBSTR on Stellar Mainnet to move funds.";
     onUpdate?.({
       hash: "blocked",
       kind: input.kind,
@@ -92,49 +75,30 @@ export function dispatchTx(
     return settlementBlockedHandle(input.kind, input.amount, msg);
   }
 
-  if (isReal) {
-    return dispatchRealTx(input, onUpdate);
-  }
-  return dispatchSimulatedTx(input, onUpdate);
+  return dispatchRealTx(input, onUpdate);
 }
 
-function simExtras(input: DispatchInput): Partial<TxRecord> {
-  const pres = input.paymentPresentation ?? "usd_notional";
-  const chainXlm = pres === "native_xlm" ? input.amount : input.amount / USDC_XLM_RATE;
-  if (pres === "native_xlm") {
-    return {
-      paymentPresentation: "native_xlm",
-      chainAmountXlm: input.amount,
-      usdNotional: input.amount * XLM_USD_PRICE_ESTIMATE,
-    };
-  }
-  return {
-    paymentPresentation: "usd_notional",
-    chainAmountXlm: chainXlm,
-    usdNotional: input.amount,
-  };
-}
-
-// ─── Real Stellar path ────────────────────────────────────────────────────────
-
-function dispatchRealTx(
-  input: DispatchInput,
-  onUpdate?: DispatchListener,
-): DispatchHandle {
+function dispatchRealTx(input: DispatchInput, onUpdate?: DispatchListener): DispatchHandle {
   const { account } = useWalletStore.getState();
   const publicKey = account!.publicKey;
 
   const pres = input.paymentPresentation ?? "usd_notional";
+  const useUsdc =
+    activeIsPublicNetwork() &&
+    (input.kind === "INVEST" || input.kind === "DEPOSIT" || pres === "usd_notional");
+
   const chainXlm = pres === "native_xlm" ? input.amount : input.amount / USDC_XLM_RATE;
-  const xlmAmount = chainXlm.toFixed(7);
+  const amountStr = useUsdc
+    ? input.amount.toFixed(7).replace(/\.?0+$/, "") || "0.0000001"
+    : chainXlm.toFixed(7);
 
   const realInput: RealTxInput = {
     kind: input.kind,
     sourcePublicKey: publicKey,
     destinationPublicKey:
       input.kind === "TRANSFER" && input.counterparty ? input.counterparty : "escrow",
-    asset: "XLM",
-    amount: xlmAmount,
+    asset: useUsdc ? "USDC" : "XLM",
+    amount: amountStr,
     memo: input.memo ?? input.produceId,
     paymentPresentation: pres,
     usdIntentUsd: pres === "usd_notional" ? input.amount : undefined,
@@ -154,6 +118,9 @@ function dispatchRealTx(
       produceName: input.produceName,
       counterparty: input.counterparty,
       receivedAsset: input.receivedAsset,
+      usdNotional:
+        record.usdNotional ??
+        (pres === "usd_notional" ? input.amount : input.amount * XLM_USD_PRICE_ESTIMATE),
     };
     finalRecord = enriched;
     onUpdate?.(enriched);
@@ -176,45 +143,6 @@ function dispatchRealTx(
         };
         resolveFinal(cancelled);
       }
-    },
-  };
-}
-
-// ─── Simulation path ──────────────────────────────────────────────────────────
-
-function dispatchSimulatedTx(
-  input: DispatchInput,
-  onUpdate?: DispatchListener,
-): DispatchHandle {
-  const simInput: SimulateTxInput = {
-    kind: input.kind,
-    amount: input.amount,
-    produceId: input.produceId,
-    produceName: input.produceName,
-    counterparty: input.counterparty,
-    memo: input.memo,
-    receivedAsset: input.receivedAsset,
-    recordExtras: simExtras(input),
-  };
-
-  let resolveFinal!: (r: TxRecord) => void;
-  const finalized = new Promise<TxRecord>((res) => {
-    resolveFinal = res;
-  });
-
-  const sim = simulateTx(simInput, (record) => {
-    onUpdate?.(record);
-    if (record.status === "confirmed" || record.status === "failed") {
-      resolveFinal(record);
-    }
-  });
-
-  return {
-    hash: sim.hash,
-    finalized,
-    isReal: false,
-    cancel: () => {
-      sim.cancel();
     },
   };
 }

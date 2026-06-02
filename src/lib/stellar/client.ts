@@ -31,6 +31,6 @@ export function networkPassphraseConst(): string {
     case "FUTURENET":
       return Networks.FUTURENET;
     default:
-      return Networks.TESTNET;
+      return Networks.PUBLIC;
   }
 }

@@ -2,11 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
+    branches: [main, master, develop]
 
 jobs:
-  lint-and-build:
+  web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,7 +15,44 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: package-lock.json
       - run: npm ci
-      - run: npm run lint
       - run: npm run build
+      - run: npm run lint
+
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rootchain
+          POSTGRES_PASSWORD: rootchain
+          POSTGRES_DB: rootchain
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rootchain"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://rootchain:rootchain@localhost:5432/rootchain
+      JWT_ACCESS_SECRET: ci-access-secret-minimum-32-chars
+      JWT_REFRESH_SECRET: ci-refresh-secret-minimum-32-chars
+      CORS_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npx prisma migrate deploy
+        working-directory: server
+      - run: npm run build
+        working-directory: server

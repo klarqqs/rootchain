@@ -14,7 +14,6 @@ import {
   activeIsPublicNetwork,
   activeNetworkLabel,
 } from "@/lib/stellar/config";
-import { requiresRealLedgerSettlement } from "@/lib/platform-mode";
 import { useStellarRuntimeStore } from "@/store/stellar-runtime.store";
 import type { StellarNetwork } from "@/types/wallet";
 
@@ -33,8 +32,7 @@ export function WalletModal({ open, onClose, onConnect }: WalletModalProps) {
   const { connect: doConnect, account } = useWallet();
   const userNetworkOverride = useStellarRuntimeStore((s) => s.userNetworkOverride);
   const setUserNetworkOverride = useStellarRuntimeStore((s) => s.setUserNetworkOverride);
-  const realOnly = requiresRealLedgerSettlement();
-  const providers = realOnly ? WALLET_PROVIDERS.filter((p) => p.id === "freighter") : WALLET_PROVIDERS;
+  const providers = WALLET_PROVIDERS;
 
   const connect = async (w: WalletProvider) => {
     setProvider(w);
@@ -95,9 +93,8 @@ export function WalletModal({ open, onClose, onConnect }: WalletModalProps) {
                         Link your wallet.
                       </h3>
                       <p className="text-sm text-slate-500 mt-1">
-                        {realOnly
-                          ? "Freighter is required for deposits and investments — settlements broadcast to Stellar with funds you control."
-                          : "Freighter signs real Horizon operations aligned to whichever ledger ROOTCHAIN routes. Other providers simulate flows for onboarding."}
+                        Connect Freighter or LOBSTR to sign real Stellar transactions. No demo or placeholder
+                        addresses are used.
                       </p>
                     </div>
                     <button
@@ -192,7 +189,7 @@ export function WalletModal({ open, onClose, onConnect }: WalletModalProps) {
                     <div className="flex items-start gap-2">
                       <Lock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
                       <p className="text-[11px] text-slate-500 leading-relaxed">
-                        We never store your seed phrase. Connections are non-custodial — signatures only authorize flows you approve in Freighter.
+                        We never store your seed phrase. Connections are non-custodial — signatures only authorize flows you approve in your wallet extension.
                       </p>
                     </div>
                   </div>

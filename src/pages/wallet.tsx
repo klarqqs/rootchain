@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import {
-  AlertTriangle,
   ArrowDownLeft,
   ArrowDownRight,
   ArrowUpRight,
@@ -17,8 +16,8 @@ import {
   QrCode,
   RefreshCw,
   Send,
+  Unlink2,
   Wallet,
-  Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Glass } from "@/components/ui/glass";
@@ -27,10 +26,9 @@ import { Pill } from "@/components/ui/pill";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { SendModal, type WalletAction } from "@/features/wallet/send-modal";
 import { useWallet } from "@/hooks/use-wallet";
-import { useFriendbot } from "@/hooks/use-friendbot";
 import { useTrustline } from "@/hooks/use-trustline";
 import { useTransactionsStore } from "@/store/transactions.store";
-import { explorerAccountUrl, activeNetworkLabel, activeIsTestnet, activeIsPublicNetwork, explorerTxUrl } from "@/lib/stellar/config";
+import { explorerAccountUrl, activeNetworkLabel, explorerTxUrl } from "@/lib/stellar/config";
 import { canExecuteReal } from "@/services/tx-dispatch";
 import { cn, formatUsd, truncateAddr } from "@/lib/utils";
 import type { TxRecord } from "@/types/transaction";
@@ -47,21 +45,22 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
   const [refreshing, setRefreshing] = useState(false);
   const [composer, setComposer] = useState<{ open: boolean; action: WalletAction }>({ open: false, action: "send" });
 
-  const { account, balances, totalUsd, refresh } = useWallet();
+  const { account, balances, totalUsd, refresh, isConnected, disconnectWallet } = useWallet();
+  const [disconnecting, setDisconnecting] = useState(false);
   const records = useTransactionsStore((s) => s.records);
-  const { state: fbState, fund: fundWithFriendbot } = useFriendbot();
   const { status: tlStatus, check: checkTrustline, addUsdc } = useTrustline();
-  const isFreighter = canExecuteReal();
+  const isRealWallet = canExecuteReal();
 
   // Auto-refresh balances and check trustline when this page is opened.
   useEffect(() => {
     if (walletConnected) {
       refresh();
-      if (isFreighter) checkTrustline();
+      if (isRealWallet) checkTrustline();
     }
-  }, [walletConnected, refresh, isFreighter, checkTrustline]);
+  }, [walletConnected, refresh, isRealWallet, checkTrustline]);
 
-  const dayChange = totalUsd * 0.0249;
+  const xlmBalance = balances.find((b) => b.symbol === "XLM");
+  const usdcBalance = balances.find((b) => b.symbol === "USDC");
 
   const copy = () => {
     if (!account) return;
@@ -76,7 +75,13 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
     setTimeout(() => setRefreshing(false), 600);
   };
 
-  if (!walletConnected || !account) {
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    await disconnectWallet();
+    setDisconnecting(false);
+  };
+
+  if (!isConnected || !walletConnected || !account) {
     return (
       <div className="pb-16">
         <Glass className="p-12 text-center max-w-xl mx-auto" glow>
@@ -91,7 +96,7 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
           </div>
           <h3 className="font-black text-2xl text-white">No wallet connected</h3>
           <p className="text-sm text-slate-500 mt-2 max-w-sm mx-auto">
-            Connect a Stellar-native wallet (Freighter, Albedo, xBull) or use WalletConnect to invest in verified harvests.
+            Connect Freighter or LOBSTR to view balances and sign Stellar transactions.
           </p>
           <div className="mt-6">
             <Btn variant="primary" icon={Wallet} size="lg" onClick={onConnectWallet}>
@@ -156,12 +161,9 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
                   </>
                 )}
               </div>
-              <div className="flex items-center gap-3 mt-3">
-                <span className="inline-flex items-center gap-1 text-sm font-bold text-lime-400 tabular-nums">
-                  <ArrowUpRight className="w-3.5 h-3.5" /> +{formatUsd(dayChange)} (2.49%)
-                </span>
-                <span className="text-xs text-slate-500">last 24h</span>
-              </div>
+              <p className="text-xs text-slate-500 mt-3">
+                Live balances from Stellar Horizon · {activeNetworkLabel()}
+              </p>
 
               {/* Address row */}
               <div className="mt-5 flex items-center gap-2 max-w-full">
@@ -195,28 +197,22 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
                 </a>
               </div>
 
+              <div className="mt-4">
+                <Btn
+                  variant="outline"
+                  size="sm"
+                  icon={Unlink2}
+                  loading={disconnecting}
+                  onClick={() => void handleDisconnect()}
+                  className="!border-rose-500/30 !text-rose-200 hover:!bg-rose-500/10 hover:!text-rose-100"
+                >
+                  Disconnect Wallet
+                </Btn>
+              </div>
+
               {/* Phase 3 banners — trustline on any live ledger; Friendbot only on testnet */}
-              {isFreighter && (activeIsTestnet() || activeIsPublicNetwork()) && (
+              {isRealWallet && (
                 <div className="mt-4 space-y-2">
-                  {activeIsTestnet() && totalUsd < 5 && (
-                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.06]">
-                      <div className="text-xs text-amber-200 flex items-center gap-2">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        Low testnet balance — get free XLM
-                      </div>
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        icon={Zap}
-                        onClick={fundWithFriendbot}
-                        loading={fbState === "loading"}
-                        className="shrink-0 !text-amber-200 hover:!text-white"
-                      >
-                        Friendbot
-                      </Btn>
-                    </div>
-                  )}
-                  {/* USDC trustline */}
                   {tlStatus === "no-usdc" && (
                     <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-sky-500/30 bg-sky-500/[0.06]">
                       <div className="text-xs text-sky-200 flex items-center gap-2">
@@ -242,9 +238,7 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-violet-500/20 bg-violet-500/[0.04]">
                     <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
                     <span className="text-[11px] text-violet-300 font-bold">
-                      {activeIsPublicNetwork()
-                        ? "Public network · real fees and assets — verify every signature in Freighter."
-                        : "Real Stellar transactions active · Testnet"}
+                      Stellar Mainnet · verify every signature in your wallet before approving.
                     </span>
                   </div>
                 </div>
@@ -278,28 +272,26 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
             </div>
           </Glass>
 
-          {/* Quick stats */}
+          {/* On-chain asset snapshot */}
           <div className="lg:col-span-4 grid grid-cols-2 lg:grid-cols-1 gap-3">
             <Glass className="p-4">
-              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500">
-                Active Investments
+              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500">XLM</div>
+              <div className="font-black text-2xl text-white tabular-nums mt-1">
+                {(xlmBalance?.amount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 7 })}
               </div>
-              <div className="font-black text-2xl text-white tabular-nums mt-1">12</div>
-              <div className="text-xs text-lime-400 font-bold mt-1">+2 this month</div>
+              <div className="text-xs text-slate-500 font-bold mt-1">Native lumen</div>
             </Glass>
             <Glass className="p-4">
-              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500">
-                Pending Claims
+              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500">USDC</div>
+              <div className="font-black text-2xl text-white tabular-nums mt-1">
+                {(usdcBalance?.amount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}
               </div>
-              <div className="font-black text-2xl text-white tabular-nums mt-1">$3,420</div>
-              <div className="text-xs text-amber-400 font-bold mt-1">2 milestones</div>
+              <div className="text-xs text-slate-500 font-bold mt-1">Circle USDC on Stellar</div>
             </Glass>
             <Glass className="p-4 col-span-2 lg:col-span-1">
-              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500">
-                Realized Yield (YTD)
-              </div>
-              <div className="font-black text-2xl text-white tabular-nums mt-1">$6,124.40</div>
-              <div className="text-xs text-lime-400 font-bold mt-1">+21.4% blended ROI</div>
+              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500">Network</div>
+              <div className="font-black text-lg text-white mt-1">{activeNetworkLabel()}</div>
+              <div className="text-xs text-lime-400 font-bold mt-1">On-chain balances only</div>
             </Glass>
           </div>
         </div>
@@ -310,7 +302,7 @@ export function WalletPage({ walletConnected, onConnectWallet, onTxClick }: Wall
           <Glass className="lg:col-span-5 p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-black text-lg text-white tracking-tight">Assets</h3>
-              <Pill color="ash">{balances.length} held</Pill>
+              <Pill color="ash">XLM + USDC</Pill>
             </div>
             <div className="space-y-2">
               {balances.map((a, i) => (

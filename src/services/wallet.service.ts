@@ -1,159 +1,142 @@
 /**
- * Wallet service — orchestrates the connection flow across providers.
- *
- * Phase 2:
- *   - Freighter: real testnet connection via @stellar/freighter-api.
- *   - All other providers: simulated (UX-identical) so the UI stays alive
- *     until those integrations are added.
+ * Wallet service — real Stellar wallet connections only (Freighter + LOBSTR).
  */
 
 import type { WalletAccount, WalletBalance, WalletProviderId } from "@/types/wallet";
 import type { Result } from "@/types/common";
 import { err, ok } from "@/types/common";
+import { useWalletStore } from "@/store/wallet.store";
 import { connectFreighter, reconnectFreighterSilently } from "@/lib/stellar/freighter";
+import { connectLobstr, reconnectLobstrSilently } from "@/lib/stellar/lobstr";
 import { fetchAccountBalances } from "@/lib/stellar/account";
-import { mockGet, MockApiError } from "@/api/client";
-
-const DEMO_ACCOUNT_BY_PROVIDER: Record<WalletProviderId, string> = {
-  freighter: "GDEMOFREIGHTERPLACEHOLDER000000000000000000000000000000000000",
-  albedo: "GDEMOALBEDOPLACEHOLDER000000000000000000000000000000000000ALBE",
-  xbull: "GDEMOXBULLPLACEHOLDER000000000000000000000000000000000000XBUL",
-  walletconnect: "GDEMOWCPLACEHOLDER000000000000000000000000000000000000000WC",
-  ledger: "GDEMOLEDGERPLACEHOLDER000000000000000000000000000000000000LEDG",
-};
-
-const DEMO_BALANCES: WalletBalance[] = [
-  { asset: "USDC", symbol: "USDC", amount: 28247.18, usdValue: 28247.18, chg24h: 0.01, color: "#2775CA", icon: "$" },
-  { asset: "XLM", symbol: "XLM", amount: 14820, usdValue: 14820 * 0.118, chg24h: 1.9, color: "#7D00FF", icon: "✦" },
-  { asset: "RCSHARE", symbol: "RC-SHARES", amount: 142.4, usdValue: 8420.30, chg24h: 4.2, color: "#84CC16", icon: "♢" },
-];
+import { isRealSigningProvider } from "@/lib/stellar/wallet-signer";
 
 export interface ConnectResult {
   account: WalletAccount;
   balances: WalletBalance[];
 }
 
-/**
- * Phase 2 connect entry point. UI calls this and gets back either a
- * real or simulated account, depending on provider.
- */
-export async function connect(provider: WalletProviderId): Promise<Result<ConnectResult>> {
-  if (provider === "walletconnect") {
-    return err({
-      name: "WalletConnectNotReady",
-      message:
-        "WalletConnect pairing for Stellar signing is queued for rollout. Use Freighter (desktop/extension) today for live Stellar testnet payments. When ready, ROOTCHAIN will use a project id from VITE_WALLETCONNECT_PROJECT_ID plus the Stellar wallet adapter.",
-      code: "WALLETCONNECT_PREP_ONLY",
-    });
+async function balancesForKey(publicKey: string): Promise<WalletBalance[]> {
+  try {
+    return await fetchAccountBalances(publicKey);
+  } catch {
+    return [];
   }
+}
 
+async function connectProvider(
+  provider: WalletProviderId,
+): Promise<Result<{ publicKey: string; network: WalletAccount["network"]; label: string }>> {
   if (provider === "freighter") {
     const conn = await connectFreighter();
     if (!conn.ok) return err(conn.error);
-
-    try {
-      const balances = await fetchAccountBalances(conn.value.publicKey);
-      return ok({
-        account: {
-          publicKey: conn.value.publicKey,
-          provider: "freighter",
-          network: conn.value.network as WalletAccount["network"],
-          label: "Freighter",
-        },
-        balances,
-      });
-    } catch {
-      // Unfunded or missing account on Horizon → show truthful empty state so Friendbot UX can activate.
-      return ok({
-        account: {
-          publicKey: conn.value.publicKey,
-          provider: "freighter",
-          network: conn.value.network as WalletAccount["network"],
-          label: "Freighter",
-        },
-        balances: [],
-      });
-    }
-  }
-
-  // Simulated providers — keep UI flow identical.
-  return mockGet<Result<ConnectResult>>(() =>
-    ok({
-      account: {
-        publicKey: DEMO_ACCOUNT_BY_PROVIDER[provider],
-        provider,
-        network: "TESTNET",
-        label: provider.charAt(0).toUpperCase() + provider.slice(1),
-      },
-      balances: DEMO_BALANCES,
-    }),
-  );
-}
-
-/**
- * Re-attach a wallet on app boot if the user previously approved access.
- */
-export async function reconnect(provider: WalletProviderId): Promise<Result<ConnectResult>> {
-  if (provider !== "freighter") {
-    // Simulated providers don't expose re-auth, so we accept persisted state as-is.
-    return err({
-      name: "ProviderHasNoSilentReconnect",
-      message: "Provider does not support silent reconnect.",
-      code: "PROVIDER_NO_SILENT_RECONNECT",
+    return ok({
+      publicKey: conn.value.publicKey,
+      network: conn.value.network as WalletAccount["network"],
+      label: "Freighter",
     });
   }
-  const conn = await reconnectFreighterSilently();
-  if (!conn.ok) return err(conn.error);
-  let balances: WalletBalance[];
-  try {
-    const fetched = await fetchAccountBalances(conn.value.publicKey);
-    balances = fetched.length === 0 ? DEMO_BALANCES : fetched;
-  } catch {
-    balances = DEMO_BALANCES;
+
+  if (provider === "lobstr") {
+    const conn = await connectLobstr();
+    if (!conn.ok) return err(conn.error);
+    return ok({
+      publicKey: conn.value.publicKey,
+      network: conn.value.network,
+      label: "LOBSTR",
+    });
   }
+
+  return err({
+    name: "UnsupportedWallet",
+    message: "Only Freighter and LOBSTR wallets are supported.",
+    code: "UNSUPPORTED_WALLET",
+  });
+}
+
+export async function connect(provider: WalletProviderId): Promise<Result<ConnectResult>> {
+  if (!isRealSigningProvider(provider)) {
+    return err({
+      name: "UnsupportedWallet",
+      message: "Only Freighter and LOBSTR wallets are supported.",
+      code: "UNSUPPORTED_WALLET",
+    });
+  }
+
+  const conn = await connectProvider(provider);
+  if (!conn.ok) return err(conn.error);
+
+  const balances = await balancesForKey(conn.value.publicKey);
+
   return ok({
     account: {
       publicKey: conn.value.publicKey,
-      provider: "freighter",
-      network: "TESTNET",
-      label: "Freighter",
+      provider,
+      network: conn.value.network,
+      label: conn.value.label,
     },
     balances,
   });
 }
 
-/**
- * Refresh balances for the connected wallet. Falls back to existing
- * balances if Horizon is unreachable.
- */
-export async function refreshBalances(account: WalletAccount): Promise<Result<WalletBalance[]>> {
-  if (account.provider === "freighter") {
-    try {
-      const balances = await fetchAccountBalances(account.publicKey);
-      return ok(balances);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not reach Horizon.";
-      return err({ name: "HorizonUnreachable", message, code: "HORIZON_UNREACHABLE" });
-    }
+export async function reconnect(provider: WalletProviderId): Promise<Result<ConnectResult>> {
+  if (!isRealSigningProvider(provider)) {
+    return err({
+      name: "ProviderHasNoSilentReconnect",
+      message: "Provider does not support reconnect.",
+      code: "PROVIDER_NO_SILENT_RECONNECT",
+    });
   }
-  return ok(DEMO_BALANCES);
+
+  const conn =
+    provider === "freighter" ? await reconnectFreighterSilently() : await reconnectLobstrSilently();
+  if (!conn.ok) return err(conn.error);
+
+  const balances = await balancesForKey(conn.value.publicKey);
+
+  return ok({
+    account: {
+      publicKey: conn.value.publicKey,
+      provider,
+      network: conn.value.network as WalletAccount["network"],
+      label: provider === "freighter" ? "Freighter" : "LOBSTR",
+    },
+    balances,
+  });
 }
 
-/**
- * Disconnect — Phase 2 just clears local state. There is no Freighter
- * "logout"; the user must revoke access in the extension itself.
- */
-export async function disconnect(): Promise<Result<true>> {
+export async function refreshBalances(account: WalletAccount): Promise<Result<WalletBalance[]>> {
+  if (!isRealSigningProvider(account.provider)) {
+    return err({
+      name: "UnsupportedWallet",
+      message: "Only real Stellar wallets can refresh balances.",
+      code: "UNSUPPORTED_WALLET",
+    });
+  }
+
   try {
-    return ok(true);
+    const balances = await fetchAccountBalances(account.publicKey);
+    return ok(balances);
   } catch (e) {
-    if (e instanceof MockApiError) {
-      return err({ name: "DisconnectFailed", message: e.message, code: e.code });
-    }
+    const message = e instanceof Error ? e.message : "Could not reach Horizon.";
+    return err({ name: "HorizonUnreachable", message, code: "HORIZON_UNREACHABLE" });
+  }
+}
+
+export async function disconnectWallet(): Promise<Result<true>> {
+  try {
+    useWalletStore.getState().disconnectWallet();
+    return ok(true);
+  } catch {
     return err({
       name: "DisconnectFailed",
       message: "Could not disconnect.",
       code: "DISCONNECT_FAILED",
     });
   }
+}
+
+/** @deprecated Prefer `disconnectWallet`. */
+export async function disconnect(): Promise<Result<true>> {
+  return disconnectWallet();
 }

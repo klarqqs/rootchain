@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { AmbientBg } from "@/components/layout/ambient-bg";
 import { LoadingScreen } from "@/components/layout/loading-screen";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { MarketingLayout } from "@/layouts/MarketingLayout";
 import { InvestModal } from "@/components/modals/invest-modal";
+import { ProjectInvestModal } from "@/features/marketplace/project-invest-modal";
 import { QRVerifyModal } from "@/components/modals/qr-verify-modal";
 import { TxDetailModal } from "@/components/modals/tx-detail-modal";
 import { UploadModal } from "@/components/modals/upload-modal";
@@ -14,20 +15,16 @@ import { ErrorBoundary } from "@/components/common/error-boundary";
 import type { SidebarToolAction } from "@/components/layout/sidebar";
 import { DemoEnvironmentBanner } from "@/components/layout/demo-environment-banner";
 import { CommunityPage } from "@/pages/community";
-import { DashboardPage } from "@/pages/dashboard";
 import { FarmersPage } from "@/pages/farmers";
 import { HelpPage } from "@/pages/help";
 import { HomePage } from "@/pages/home";
 import { AboutPage } from "@/pages/about";
-import { MarketplacePage } from "@/pages/marketplace";
 import { FarmerRegisterPage } from "@/pages/farmer-register";
 import { PrivacyPage } from "@/pages/privacy";
 import { TermsPage } from "@/pages/terms";
 import { RoadmapPage } from "@/pages/roadmap";
-import { AdminPage } from "@/pages/admin";
 import { CompliancePage } from "@/pages/compliance";
 import { EcosystemPartnersPage } from "@/pages/ecosystem";
-import { InsightsPage } from "@/pages/insights";
 import { PilotLaunchPage } from "@/pages/launch";
 import { VerificationPage } from "@/pages/verification";
 import { WalletPage } from "@/pages/wallet";
@@ -38,6 +35,7 @@ import { AccountPage } from "@/pages/account";
 import { OnboardingFlow } from "@/features/onboarding/onboarding-flow";
 import { AiAssistantDock } from "@/components/ai/ai-assistant-dock";
 import type { ProduceItem } from "@/data/produce";
+import type { MarketplaceListing } from "@/types/marketplace";
 import type { Page } from "@/lib/nav";
 import { getAppLayoutMode } from "@/lib/layout-mode";
 import {
@@ -49,12 +47,34 @@ import {
 import { walletConnectRequiresAccount } from "@/lib/platform-mode";
 import { useWallet } from "@/hooks/use-wallet";
 import { useIdentityBootstrap } from "@/hooks/use-identity-bootstrap";
+import { useRealtime } from "@/hooks/use-realtime";
 import { useHorizonSync } from "@/hooks/use-horizon-sync";
 import { useStellarRuntimeBridge } from "@/hooks/use-stellar-runtime-bridge";
 import { useMarketFeedSimulator } from "@/hooks/use-market-feed";
 import { usePortfolioStore } from "@/store/portfolio.store";
 import { useIdentityStore } from "@/store/identity.store";
 import { useNotificationsStore } from "@/store/notifications.store";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const DashboardPage = lazy(() =>
+  import("@/pages/dashboard").then((m) => ({ default: m.DashboardPage })),
+);
+const MarketplacePage = lazy(() =>
+  import("@/pages/marketplace").then((m) => ({ default: m.MarketplacePage })),
+);
+const AdminPage = lazy(() => import("@/pages/admin").then((m) => ({ default: m.AdminPage })));
+const InsightsPage = lazy(() =>
+  import("@/pages/insights").then((m) => ({ default: m.InsightsPage })),
+);
+
+function PageFallback() {
+  return (
+    <div className="p-6 space-y-3">
+      <Skeleton className="h-10 w-48" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -63,12 +83,14 @@ export default function App() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [investItem, setInvestItem] = useState<ProduceItem | null>(null);
+  const [investListing, setInvestListing] = useState<MarketplaceListing | null>(null);
   const [qrItem, setQrItem] = useState<ProduceItem | null>(null);
   const [txDetailHash, setTxDetailHash] = useState<string | null>(null);
 
   const { isConnected } = useWallet();
 
   useIdentityBootstrap();
+  useRealtime();
   useStellarRuntimeBridge();
   // Phase 3: real-time Horizon sync (starts/stops with wallet connection).
   useHorizonSync();
@@ -190,24 +212,25 @@ export default function App() {
       )}
       {page === "about" && <AboutPage setPage={setPage} />}
       {page === "marketplace" && (
-        <MarketplacePage
-          onInvest={(it) => {
-            if (walletConnectRequiresAccount() && !signedIn) {
-              useNotificationsStore.getState().push({
-                tone: "info",
-                title: "Sign in to invest",
-                description: "Create an account, connect Freighter, then allocate capital on-chain.",
-                duration: 6800,
-              });
-              stashReturnPage("marketplace");
-              setPage("signup");
-              return;
-            }
-            setInvestItem(it);
-          }}
-          onVerify={(it) => setQrItem(it)}
-          setUploadOpen={setUploadOpen}
-        />
+        <Suspense fallback={<PageFallback />}>
+          <MarketplacePage
+            onInvest={(listing) => {
+              if (walletConnectRequiresAccount() && !signedIn) {
+                useNotificationsStore.getState().push({
+                  tone: "info",
+                  title: "Sign in to invest",
+                  description: "Create an account, connect Freighter, then allocate capital on-chain.",
+                  duration: 6800,
+                });
+                stashReturnPage("marketplace");
+                setPage("signup");
+                return;
+              }
+              setInvestListing(listing);
+            }}
+            onTxClick={(hash) => setTxDetailHash(hash)}
+          />
+        </Suspense>
       )}
       {page === "farmers" && <FarmersPage />}
       {page === "community" && <CommunityPage />}
@@ -223,7 +246,13 @@ export default function App() {
       {page === "forgot-password" && <ForgotPasswordPage setPage={setPage} />}
       {layoutMode === "dashboard" && page === "verification" && <VerificationPage />}
       {layoutMode === "dashboard" && page === "dashboard" && (
-        <DashboardPage onTxClick={(hash) => setTxDetailHash(hash)} />
+        <Suspense fallback={<PageFallback />}>
+          <DashboardPage
+            onTxClick={(hash) => setTxDetailHash(hash)}
+            onOpenMarketplace={() => setPage("marketplace")}
+            onCreateProject={() => setUploadOpen(true)}
+          />
+        </Suspense>
       )}
       {layoutMode === "dashboard" && page === "wallet" && (
         <WalletPage
@@ -233,8 +262,16 @@ export default function App() {
         />
       )}
       {layoutMode === "dashboard" && page === "register" && <FarmerRegisterPage />}
-      {layoutMode === "dashboard" && page === "insights" && <InsightsPage />}
-      {layoutMode === "dashboard" && page === "admin" && <AdminPage />}
+      {layoutMode === "dashboard" && page === "insights" && (
+        <Suspense fallback={<PageFallback />}>
+          <InsightsPage />
+        </Suspense>
+      )}
+      {layoutMode === "dashboard" && page === "admin" && (
+        <Suspense fallback={<PageFallback />}>
+          <AdminPage />
+        </Suspense>
+      )}
       {layoutMode === "dashboard" && page === "account" && <AccountPage setPage={setPage} />}
     </>
   );
@@ -301,6 +338,15 @@ export default function App() {
           onClose={() => setInvestItem(null)}
           item={investItem}
           onTxComplete={(hash) => setTxDetailHash(hash)}
+        />
+        <ProjectInvestModal
+          open={!!investListing}
+          listing={investListing}
+          onClose={() => setInvestListing(null)}
+          onConnectWallet={() => setWalletOpen(true)}
+          onSuccess={() => {
+            /* dashboard transaction history reloads on next visit or Refresh */
+          }}
         />
         <QRVerifyModal
           open={!!qrItem}

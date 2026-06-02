@@ -6,6 +6,7 @@ import { PAGE_META, type Page } from "@/lib/nav";
 import { truncateAddr } from "@/lib/utils";
 import { useWallet } from "@/hooks/use-wallet";
 import { NotificationDrawer } from "@/components/layout/notification-drawer";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { useIdentityStore } from "@/store/identity.store";
 import { signOutEverywhere } from "@/services/auth-session.service";
 
@@ -61,6 +62,7 @@ export function TopBar({ setSidebarOpen, onConnectWallet, setPage, page }: TopBa
           </kbd>
         </div>
 
+        <NotificationBell />
         <NotificationDrawer
           open={notificationsOpen}
           onToggle={() => setNotificationsOpen((prev) => !prev)}

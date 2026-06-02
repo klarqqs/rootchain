@@ -21,7 +21,9 @@ import type { AppProfileRow } from "@/database/types";
 import type { Page } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import { consumeReturnPage } from "@/lib/auth-routes";
+import { isApiBackendConfigured } from "@/lib/api/config";
 import {
+  registerWithEmailApi,
   sendEmailSignUpOtp,
   setPasswordForCurrentUser,
   verifyEmailOtp,
@@ -159,6 +161,23 @@ export function SignupPage({ setPage }: SignupPageProps) {
   const sendSignupOtp = async () => {
     try {
       setBusy(true);
+      if (isApiBackendConfigured()) {
+        await registerWithEmailApi({
+          email,
+          password,
+          fullName: fullLegalName.trim(),
+          role: role === "farmer" ? "FARMER" : "INVESTOR",
+        });
+        push({
+          tone: "success",
+          title: "Account created",
+          description: "Your workspace is ready — syncing dashboards.",
+          duration: 5600,
+        });
+        setPage(consumeReturnPage("home"));
+        return;
+      }
+
       await sendEmailSignUpOtp({
         email,
         role,

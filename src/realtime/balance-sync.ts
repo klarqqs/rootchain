@@ -1,18 +1,12 @@
 /**
  * Live balance synchronisation with Stellar Horizon.
  *
- * When a Freighter wallet is connected we poll Horizon every
- * VITE_BALANCE_POLL_MS (default 12s). Non-Freighter providers fall back to
- * mock balances which remain up-to-date via local `adjustBalance()` calls.
- *
- * Usage:
- *   const sync = createBalanceSync();
- *   sync.start();    // Call once after wallet connects
- *   sync.stop();     // Call on disconnect or unmount
+ * Polls Horizon for connected real wallets (Freighter + LOBSTR).
  */
 
 import { fetchAccountBalances } from "@/lib/stellar/account";
 import { useWalletStore } from "@/store/wallet.store";
+import { isRealSigningProvider } from "@/lib/stellar/wallet-signer";
 import { createPoller, type Poller } from "./poller";
 
 const env = import.meta.env;
@@ -23,13 +17,13 @@ let activeSync: Poller | null = null;
 async function doSync() {
   const { status, account, setBalances } = useWalletStore.getState();
   if (status !== "connected" || !account) return;
-  if (account.provider !== "freighter") return; // only Freighter has real on-chain data
+  if (!isRealSigningProvider(account.provider)) return;
 
   try {
     const balances = await fetchAccountBalances(account.publicKey);
     setBalances(balances);
   } catch {
-    // Horizon unreachable — keep existing balances.
+    // Horizon unreachable — keep last known on-chain snapshot.
   }
 }
 
@@ -44,7 +38,6 @@ export function stopBalanceSync() {
   activeSync = null;
 }
 
-/** Force a single immediate refresh (e.g. after a confirmed tx). */
 export function refreshBalancesNow() {
-  doSync();
+  void doSync();
 }

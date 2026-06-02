@@ -4,6 +4,7 @@ import { Btn } from "@/components/ui/button";
 import { HeroAfricaMap } from "@/components/marketing/hero-africa-map";
 import { HeroProductMockup } from "@/components/marketing/hero-product-mockup";
 import type { Page } from "@/lib/nav";
+import { isSupabaseAuthEnforced } from "@/lib/auth-routes";
 import { stashSignupPersonaRole } from "@/lib/signup-intent";
 
 export interface HeroSectionProps {
@@ -25,9 +26,13 @@ const METRICS = [
 ] as const;
 
 export function HeroSection({ setPage }: HeroSectionProps) {
-  const goFarmerSignup = () => {
-    stashSignupPersonaRole("farmer");
-    setPage("signup");
+  const goFarmerRegister = () => {
+    if (isSupabaseAuthEnforced()) {
+      stashSignupPersonaRole("farmer");
+      setPage("signup");
+      return;
+    }
+    setPage("register");
   };
 
   return (
@@ -101,7 +106,7 @@ export function HeroSection({ setPage }: HeroSectionProps) {
               >
                 Start investing
               </Btn>
-              <Btn variant="outline" size="lg" icon={Tractor} onClick={goFarmerSignup}>
+              <Btn variant="outline" size="lg" icon={Tractor} onClick={goFarmerRegister}>
                 Register your farm
               </Btn>
             </div>

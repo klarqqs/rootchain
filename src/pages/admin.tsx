@@ -4,7 +4,6 @@ import { Glass } from "@/components/ui/glass";
 import { Pill } from "@/components/ui/pill";
 import { Btn } from "@/components/ui/button";
 import { publicEnv } from "@/lib/env";
-import { isSupabaseAuthEnforced } from "@/lib/auth-routes";
 import { SEED_FARMERS } from "@/database/seed-farmers";
 import { useAdminFarmerFlagsStore } from "@/store/admin-farmer-flags.store";
 import { useFarmerApplicationsStore } from "@/store/farmer-applications.store";
@@ -13,6 +12,9 @@ import { useIdentityStore } from "@/store/identity.store";
 import { computePlatformTransparency } from "@/transparency/platform-metrics";
 import { formatUsd } from "@/lib/utils";
 import { signOutEverywhere } from "@/services/auth-session.service";
+import { AdminPlatformConsole } from "@/features/admin/admin-platform-console";
+import { isApiBackendConfigured } from "@/lib/api/config";
+import { LiveActivityFeed } from "@/features/transparency/live-activity-feed";
 
 const STORAGE_KEY = "rootchain_admin_ok";
 
@@ -23,10 +25,9 @@ export function AdminPage() {
   const positions = usePortfolioStore((s) => s.positions);
   const [token, setToken] = useState("");
   const [tokenGate, setTokenGate] = useState(() => sessionStorage.getItem(STORAGE_KEY) === "1");
-  const identityAdminGate = Boolean(
-    isSupabaseAuthEnforced() && profile?.role === "admin" && sessionUser,
-  );
-  const unlocked = identityAdminGate || (publicEnv.adminTokenConfigured && tokenGate);
+  const identityAdminGate = Boolean(profile?.role === "admin" && sessionUser);
+  const unlocked =
+    identityAdminGate || (publicEnv.adminTokenConfigured && tokenGate);
   const expected = import.meta.env.VITE_ADMIN_TOKEN as string | undefined;
   const applications = useFarmerApplicationsStore((s) => s.items);
   const overrides = useAdminFarmerFlagsStore((s) => s.overrides);
@@ -59,9 +60,8 @@ export function AdminPage() {
         <Lock className="w-6 h-6 text-amber-300 mx-auto" />
         <h1 className="font-black text-2xl text-white">Admin console locked</h1>
         <p className="text-sm text-slate-400">
-          Set <code className="text-lime-200">VITE_ADMIN_TOKEN</code> for the legacy operator gate, or promote an
-          operator via <code className="text-lime-200">app_profiles.role = &apos;admin&apos;</code> when{" "}
-          <code className="text-lime-200">VITE_SUPABASE_AUTH=true</code>.
+          Set <code className="text-lime-200">VITE_ADMIN_TOKEN</code> for the legacy operator gate, or sign in with a
+          user whose platform role is <code className="text-lime-200">admin</code> (Railway API or Supabase profile).
         </p>
       </Glass>
     );
@@ -119,6 +119,13 @@ export function AdminPage() {
           {identityAdminGate ? "Sign out (Supabase)" : "Lock console"}
         </Btn>
       </Glass>
+
+      {isApiBackendConfigured() && profile?.role === "admin" && (
+        <>
+          <AdminPlatformConsole />
+          <LiveActivityFeed />
+        </>
+      )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Outstanding escrow (model)" value={formatUsd(escrowLocked)} />

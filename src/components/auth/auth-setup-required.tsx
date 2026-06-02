@@ -1,4 +1,4 @@
-import { ExternalLink, Globe, KeyRound } from "lucide-react";
+import { ExternalLink, Globe, KeyRound, Server } from "lucide-react";
 import { Btn } from "@/components/ui/button";
 import { Glass } from "@/components/ui/glass";
 import { supabaseSetupHint } from "@/lib/supabase-env";
@@ -21,44 +21,55 @@ export function AuthSetupRequired({
       <div className="space-y-2">
         <h1 className="font-black text-2xl text-white tracking-tight">{title}</h1>
         <p className="text-sm text-slate-400 leading-relaxed">
-          ROOTCHAIN accounts run on Supabase Auth. The app cannot register or sign in until your local{" "}
-          <code className="text-lime-200">.env</code> has a real project URL and anon key.
+          ROOTCHAIN needs a backend for accounts and marketplace data. Configure either the{" "}
+          <strong className="text-white font-bold">Railway API</strong> (recommended) or{" "}
+          <strong className="text-white font-bold">Supabase</strong> in your local{" "}
+          <code className="text-lime-200">.env</code>.
         </p>
         {hint ? <p className="text-xs text-amber-200/90 font-medium">{hint}</p> : null}
       </div>
 
-      <ol className="text-left text-sm text-slate-400 space-y-3 list-decimal list-inside">
-        <li>
-          Create a project at{" "}
-          <a
-            href="https://supabase.com/dashboard"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="text-emerald-400 font-bold hover:underline"
-          >
-            supabase.com/dashboard
-          </a>
-        </li>
-        <li>
-          Copy <span className="text-slate-300">Project URL</span> and{" "}
-          <span className="text-slate-300">anon public</span> key into <code className="text-lime-200">.env</code>
-        </li>
-        <li>
-          Run SQL in <code className="text-lime-200">supabase/migrations/001_app_profiles.sql</code>
-        </li>
-        <li>
-          Enable Email OTP + SMTP — see <code className="text-lime-200">supabase/AUTH_EMAIL_OTP.md</code>
-        </li>
-        <li>Restart <code className="text-lime-200">npm run dev</code></li>
-      </ol>
+      <div className="text-left space-y-4">
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2">
+          <p className="text-xs font-black uppercase tracking-wider text-emerald-300 flex items-center gap-2">
+            <Server className="w-4 h-4" />
+            Railway API (JWT + PostgreSQL)
+          </p>
+          <ol className="text-sm text-slate-400 space-y-2 list-decimal list-inside">
+            <li>
+              <code className="text-lime-200">cd server && cp .env.example .env</code> — set{" "}
+              <code className="text-lime-200">DATABASE_URL</code> and JWT secrets
+            </li>
+            <li>
+              <code className="text-lime-200">npm install && npx prisma migrate dev && npm run db:seed</code>
+            </li>
+            <li>
+              <code className="text-lime-200">npm run dev</code> in <code className="text-lime-200">server/</code> (port 3001)
+            </li>
+            <li>
+              In root <code className="text-lime-200">.env</code>:{" "}
+              <code className="text-lime-200">VITE_API_URL=http://localhost:3001/api/v1</code>
+            </li>
+          </ol>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+          <p className="text-xs font-black uppercase tracking-wider text-slate-400">Legacy: Supabase</p>
+          <ol className="text-sm text-slate-500 space-y-2 list-decimal list-inside">
+            <li>Project URL + anon key in <code className="text-lime-200">.env</code></li>
+            <li>Run SQL under <code className="text-lime-200">supabase/migrations/</code></li>
+            <li>See <code className="text-lime-200">supabase/AUTH_EMAIL_OTP.md</code></li>
+          </ol>
+        </div>
+      </div>
 
       <div className="flex flex-col sm:flex-row gap-2 justify-center">
         <Btn
           variant="outline"
           icon={ExternalLink}
-          onClick={() => window.open("https://supabase.com/dashboard/project/_/settings/api", "_blank")}
+          onClick={() => window.open("https://railway.app", "_blank")}
         >
-          Open Supabase API settings
+          Railway dashboard
         </Btn>
         {setPage && (
           <Btn variant="ghost" onClick={() => setPage("home")}>

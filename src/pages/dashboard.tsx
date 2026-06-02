@@ -1,14 +1,7 @@
-import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  CheckCircle2,
-  ChevronRight,
   DollarSign,
   Download,
-  Link2,
-  Loader2,
   Sprout,
   TrendingUp,
   Wallet,
@@ -38,29 +31,18 @@ import { TransparencyStrip } from "@/features/dashboard/transparency-strip";
 import { HarvestEscrowRail } from "@/features/dashboard/harvest-escrow-rail";
 import { AgIntelPanel } from "@/features/dashboard/ag-intel-panel";
 import { InvestmentCertificateModal } from "@/features/investments/investment-certificate-modal";
+import { MarketplaceTransactionHistory } from "@/features/dashboard/marketplace-transaction-history";
+import { InvestorPortfolioPanel } from "@/features/dashboard/investor-portfolio";
+import { FarmerDashboardPanel } from "@/features/dashboard/farmer-dashboard";
+import { useIdentityStore } from "@/store/identity.store";
+import { portfolioUsesApi } from "@/services/portfolio-api.service";
+import { InvestorAnalyticsPanel } from "@/features/analytics/investor-analytics-panel";
+import { LiveActivityFeed } from "@/features/transparency/live-activity-feed";
 import { ALLOCATION, HARVEST_PERF, PORTFOLIO_CHART } from "@/data/market";
-import { TX_HISTORY } from "@/data/wallet";
 import { cn, formatUsd } from "@/lib/utils";
 import { useWallet } from "@/hooks/use-wallet";
 import { usePortfolio } from "@/hooks/use-portfolio";
-import { useTransactionsStore } from "@/store/transactions.store";
-import type { TxRecord } from "@/types/transaction";
 import type { Investment } from "@/types/portfolio";
-
-// Seeded historical transactions — computed once at module load so the dashboard
-// always shows a populated tx panel, even before the user has a wallet connected.
-const SEED_LOAD_TS = Date.now();
-const SEEDED_TX_RECORDS: TxRecord[] = TX_HISTORY.map((t, idx) => ({
-  hash: t.hash,
-  kind: t.type as TxRecord["kind"],
-  status: "confirmed" as const,
-  amount: t.amount,
-  produceId: t.produce !== "—" ? t.produce : undefined,
-  fee: 0.00001,
-  confirmations: 5,
-  createdAt: SEED_LOAD_TS - 1000 * 60 * 60 * (idx + 1),
-  settledAt: SEED_LOAD_TS - 1000 * 60 * 60 * (idx + 1) + 2000,
-}));
 
 const TOOLTIP_STYLE = {
   background: "rgba(7,10,9,0.95)",
@@ -72,12 +54,18 @@ const TOOLTIP_STYLE = {
 
 interface DashboardPageProps {
   onTxClick?: (hash: string) => void;
+  onOpenMarketplace?: () => void;
+  onCreateProject?: () => void;
 }
 
-export function DashboardPage({ onTxClick }: DashboardPageProps) {
+export function DashboardPage({
+  onTxClick,
+  onOpenMarketplace,
+  onCreateProject,
+}: DashboardPageProps) {
+  const profile = useIdentityStore((s) => s.profile);
   const { totalUsd, balances, account } = useWallet();
   const { snapshot, positions, advanceHarvestMilestone } = usePortfolio();
-  const liveRecords = useTransactionsStore((s) => s.records);
   const usdc = balances.find((b) => b.symbol === "USDC" || b.asset === "USDC");
   const [certificateTarget, setCertificateTarget] = useState<Investment | null>(null);
 
@@ -109,12 +97,8 @@ export function DashboardPage({ onTxClick }: DashboardPageProps) {
     }));
   })();
   const allocation = derivedAllocation ?? ALLOCATION;
-
-  // Merge live transactions with the seeded module-level history.
-  const mergedHistory: TxRecord[] = useMemo(
-    () => [...liveRecords, ...SEEDED_TX_RECORDS].slice(0, 10),
-    [liveRecords],
-  );
+  const role = profile?.role;
+  const showLiveEngine = portfolioUsesApi() && (role === "investor" || role === "farmer");
 
   const escapeCsvCell = (v: string | number | undefined | null) => {
     const raw = `${v ?? ""}`;
@@ -171,6 +155,17 @@ export function DashboardPage({ onTxClick }: DashboardPageProps) {
 
   return (
     <div className="space-y-5 pb-16">
+      {showLiveEngine && role === "investor" && (
+        <>
+          <InvestorPortfolioPanel onOpenMarketplace={onOpenMarketplace} onTxClick={onTxClick} />
+          <InvestorAnalyticsPanel />
+          <LiveActivityFeed />
+        </>
+      )}
+      {showLiveEngine && role === "farmer" && (
+        <FarmerDashboardPanel onCreateProject={onCreateProject} />
+      )}
+
       <Glass className="p-4 flex flex-wrap items-center justify-between gap-3 border border-white/[0.04]">
         <div className="min-w-0">
           <div className="text-[11px] font-black uppercase tracking-wider text-slate-400">Reporting lane</div>
@@ -187,7 +182,7 @@ export function DashboardPage({ onTxClick }: DashboardPageProps) {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat
           label="Portfolio Value"
-          value={totalUsd > 0 ? formatUsd(totalUsd) : "$ 28,247.18"}
+          value={totalUsd > 0 ? formatUsd(totalUsd) : formatUsd(0)}
           delta="+6.94%"
           icon={Wallet}
           sub="7d"
@@ -384,81 +379,10 @@ export function DashboardPage({ onTxClick }: DashboardPageProps) {
           <MarketInsights />
         </div>
 
-        {/* Tx history */}
-        <Glass className="lg:col-span-5 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-black text-lg text-white tracking-tight">Transaction History</h3>
-            <button className="text-xs font-bold text-lime-400 hover:text-lime-300 flex items-center gap-1">
-              View all <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-          <div className="space-y-1">
-            {mergedHistory.slice(0, 7).map((tx, i) => {
-              const isPending = ["building", "signing", "broadcasting", "pending"].includes(tx.status);
-              return (
-                <motion.button
-                  key={tx.hash}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  onClick={() => onTxClick?.(tx.hash)}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/[0.04] transition group text-left"
-                >
-                  <div
-                    className={cn(
-                      "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border",
-                      tx.kind === "INVEST"
-                        ? "bg-lime-500/10 border-lime-500/20"
-                        : tx.kind === "CLAIM"
-                          ? "bg-emerald-500/10 border-emerald-500/20"
-                          : "bg-sky-500/10 border-sky-500/20",
-                    )}
-                  >
-                    {isPending ? (
-                      <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
-                    ) : tx.kind === "INVEST" ? (
-                      <ArrowUpRight className="w-4 h-4 text-lime-400" />
-                    ) : tx.kind === "CLAIM" ? (
-                      <ArrowDownRight className="w-4 h-4 text-emerald-400" />
-                    ) : (
-                      <Link2 className="w-4 h-4 text-sky-400" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-xs text-white flex items-center gap-1.5">
-                      {tx.kind}
-                      {tx.produceId && (
-                        <>
-                          <span className="text-slate-500">·</span>
-                          <span className="text-slate-400">{tx.produceId}</span>
-                        </>
-                      )}
-                      {isPending && (
-                        <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider">
-                          {tx.status}
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-mono text-[10px] text-slate-500 truncate">
-                      {tx.hash.slice(0, 10)}…{tx.hash.slice(-6)}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="font-bold text-sm text-white tabular-nums">
-                      ${tx.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-slate-600">
-                      {timeAgo(tx.createdAt)}
-                    </div>
-                  </div>
-                  {tx.status === "confirmed" && (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-lime-400/50 group-hover:text-lime-400 shrink-0" />
-                  )}
-                </motion.button>
-              );
-            })}
-          </div>
-        </Glass>
+        {/* Marketplace investment transactions (Supabase) */}
+        <div className="lg:col-span-5">
+          <MarketplaceTransactionHistory />
+        </div>
       </div>
 
       <InvestmentCertificateModal
@@ -469,12 +393,4 @@ export function DashboardPage({ onTxClick }: DashboardPageProps) {
       />
     </div>
   );
-}
-
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
 }

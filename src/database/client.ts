@@ -5,9 +5,10 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isApiBackendConfigured } from "@/lib/api/config";
+import { isSupabaseConfigured } from "@/lib/supabase-env";
 import type { Database } from "./types";
 import { hybridSupabaseAuthStorage } from "./auth-storage";
-import { isSupabaseConfigured } from "@/lib/supabase-env";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -24,4 +25,5 @@ export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured()
       })
   : null;
 
-export const dbAvailable = supabase !== null;
+/** Supabase and/or Railway API — app can run with either backend. */
+export const dbAvailable = supabase !== null || isApiBackendConfigured();

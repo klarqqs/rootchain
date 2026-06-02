@@ -109,7 +109,7 @@ export async function connectFreighter(): Promise<Result<FreighterConnection>> {
 
   return ok({
     publicKey: addressRes.address,
-    network: detailsRes.network ?? "TESTNET",
+    network: detailsRes.network ?? "PUBLIC",
     networkPassphrase: detailsRes.networkPassphrase ?? want,
   });
 }

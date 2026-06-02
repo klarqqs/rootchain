@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rootchain
+      POSTGRES_PASSWORD: rootchain
+      POSTGRES_DB: rootchain
+    # Host 5433 avoids conflict with macOS Postgres often bound to 5432
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://rootchain:rootchain@postgres:5432/rootchain
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: change-me-access-min-32-characters-long
+      JWT_REFRESH_SECRET: change-me-refresh-min-32-characters-long
+      CORS_ORIGIN: http://localhost:5173
+      NODE_ENV: development
+      STELLAR_NETWORK: testnet
+    depends_on:
+      - postgres
+      - redis
+    command: sh -c "npx prisma migrate deploy && npm run start"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

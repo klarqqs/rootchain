@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import type { AppProfileRow } from "@/database/types";
 import { supabase } from "@/database/client";
+import { isApiBackendConfigured } from "@/lib/api/config";
 
 export type IdentityHydration = "pending" | "ready";
 
@@ -21,8 +22,17 @@ interface IdentityState {
   clear: () => void;
 }
 
+export function getIdentityUserId(): string | null {
+  const s = useIdentityStore.getState();
+  return s.session?.user?.id ?? s.profile?.id ?? null;
+}
+
+export function isIdentitySignedIn(): boolean {
+  return getIdentityUserId() !== null;
+}
+
 export const useIdentityStore = create<IdentityState>((set) => ({
-  hydration: supabase ? "pending" : "ready",
+  hydration: supabase || isApiBackendConfigured() ? "pending" : "ready",
   session: null,
   profile: null,
   passwordRecoveryMode: false,

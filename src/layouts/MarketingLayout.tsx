@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { LandingNav } from "@/components/marketing/LandingNav";
 import { LandingFooter } from "@/components/marketing/LandingFooter";
 import { GetStartedModal } from "@/components/marketing/get-started-modal";
+import { isSupabaseAuthEnforced } from "@/lib/auth-routes";
 import {
   LandingHomeScrollProvider,
   useLandingHomeScroll,
@@ -27,6 +28,15 @@ function MarketingLayoutInner({
   const { scrollProgress, reset } = useLandingHomeScroll();
   const isHome = page === "home";
   const [getStartedOpen, setGetStartedOpen] = useState(false);
+  const authEnforced = isSupabaseAuthEnforced();
+
+  const requestGetStarted = () => {
+    if (!authEnforced) {
+      setPage("marketplace");
+      return;
+    }
+    setGetStartedOpen(true);
+  };
 
   useEffect(() => {
     if (!isHome) reset();
@@ -34,13 +44,16 @@ function MarketingLayoutInner({
 
   return (
     <div className="flex flex-col min-h-screen">
-      <GetStartedModal open={getStartedOpen} onOpenChange={setGetStartedOpen} setPage={setPage} />
+      {authEnforced && (
+        <GetStartedModal open={getStartedOpen} onOpenChange={setGetStartedOpen} setPage={setPage} />
+      )}
       <LandingNav
         page={page}
         setPage={setPage}
         onConnectWallet={onConnectWallet}
         signedIn={signedIn}
-        requestGetStarted={() => setGetStartedOpen(true)}
+        requestGetStarted={requestGetStarted}
+        authEnforced={authEnforced}
       />
       {isHome && (
         <div className="h-[3px] w-full bg-white/[0.06] shrink-0" aria-hidden>
@@ -55,7 +68,7 @@ function MarketingLayoutInner({
           {children}
         </div>
       </main>
-      <LandingFooter setPage={setPage} requestGetStarted={() => setGetStartedOpen(true)} />
+      <LandingFooter setPage={setPage} requestGetStarted={requestGetStarted} authEnforced={authEnforced} />
     </div>
   );
 }

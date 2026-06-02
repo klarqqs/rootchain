@@ -12,7 +12,8 @@ import { Transaction } from "@stellar/stellar-sdk";
 import { networkPassphraseConst } from "./client";
 import { horizon } from "./client";
 import { buildPaymentTx, type SupportedAssetSymbol } from "./tx-builder";
-import { signWithFreighter } from "./freighter";
+import { signWithConnectedWallet } from "./wallet-signer";
+import { useWalletStore } from "@/store/wallet.store";
 import type { TxKind, TxPaymentPresentation, TxRecord } from "@/types/transaction";
 import { XLM_USD_PRICE_ESTIMATE } from "./account";
 import { activeIsPublicNetwork } from "./effective-network";
@@ -195,7 +196,11 @@ export async function executeRealTx(
   // ── 2. Signing ─────────────────────────────────────────────────────────────
   onUpdate(base("signing"));
 
-  const signResult = await signWithFreighter(unsignedXdr, input.sourcePublicKey);
+  const signResult = await signWithConnectedWallet(
+    useWalletStore.getState().account!.provider,
+    unsignedXdr,
+    input.sourcePublicKey,
+  );
   if (!signResult.ok) {
     onUpdate(
       base("failed", {

@@ -11,12 +11,18 @@ import { useShallow } from "zustand/react/shallow";
 import { useWalletStore } from "@/store/wallet.store";
 import { useNotificationsStore } from "@/store/notifications.store";
 import { walletService } from "@/services";
-import { userService } from "@/database";
-import { updateAppProfile } from "@/services/auth-session.service";
+import { updateProfileWalletAddress } from "@/database/services/profile.service";
+import { isRealSigningProvider } from "@/lib/stellar/wallet-signer";
 import { useIdentityStore } from "@/store/identity.store";
 import { startRealtime, stopRealtime } from "@/realtime";
 import type { WalletProviderId } from "@/types/wallet";
 import { truncateAddr } from "@/lib/utils";
+
+async function syncProfileWallet(publicKey: string | null): Promise<void> {
+  const uid = useIdentityStore.getState().session?.user?.id;
+  if (!uid) return;
+  await updateProfileWalletAddress(uid, publicKey);
+}
 
 export function useWallet() {
   const {
@@ -28,7 +34,6 @@ export function useWallet() {
     lastError,
     setConnecting,
     setConnected,
-    setDisconnected,
     setError,
     setBalances,
   } = useWalletStore(
@@ -41,7 +46,6 @@ export function useWallet() {
       lastError: s.lastError,
       setConnecting: s.setConnecting,
       setConnected: s.setConnected,
-      setDisconnected: s.setDisconnected,
       setError: s.setError,
       setBalances: s.setBalances,
     })),
@@ -50,20 +54,24 @@ export function useWallet() {
   const pushToast = useNotificationsStore((s) => s.push);
   const reconnectAttempted = useRef(false);
 
-  /** Reconnect on first mount if we have persisted state. */
+  /** Reconnect on first mount if we have a persisted real wallet session. */
   useEffect(() => {
     if (!isHydrated || reconnectAttempted.current) return;
     reconnectAttempted.current = true;
 
-    if (account?.provider === "freighter" && status === "connected") {
-      walletService.reconnect("freighter").then((res) => {
+    if (
+      account &&
+      isRealSigningProvider(account.provider) &&
+      status === "connected"
+    ) {
+      walletService.reconnect(account.provider).then((res) => {
         if (res.ok) {
           setConnected(res.value.account, res.value.balances);
+          void syncProfileWallet(res.value.account.publicKey);
         }
-        // Silent failure — keep persisted UI until user reconnects.
       });
     }
-  }, [isHydrated, account?.provider, status, setConnected]);
+  }, [isHydrated, account, status, setConnected]);
 
   const connect = useCallback(
     async (provider: WalletProviderId) => {
@@ -80,17 +88,8 @@ export function useWallet() {
         return false;
       }
       setConnected(res.value.account, res.value.balances);
-      // Phase 3: kick off live Horizon sync and persist user profile.
       startRealtime();
-      userService.upsertUser(res.value.account.publicKey).catch(() => {
-        // Non-fatal — DB might not be configured.
-      });
-      const uid = useIdentityStore.getState().session?.user?.id;
-      if (uid) {
-        void updateAppProfile(uid, { wallet_public_key: res.value.account.publicKey }).catch(() => {
-          /* profile row may still be provisioning */
-        });
-      }
+      await syncProfileWallet(res.value.account.publicKey);
       pushToast({
         tone: "success",
         title: `${res.value.account.label ?? provider} connected`,
@@ -102,16 +101,26 @@ export function useWallet() {
     [pushToast, setConnected, setConnecting, setError],
   );
 
-  const disconnect = useCallback(async () => {
+  const disconnectWallet = useCallback(async () => {
     stopRealtime();
-    await walletService.disconnect();
-    setDisconnected();
+    const res = await walletService.disconnectWallet();
+    if (!res.ok) {
+      pushToast({
+        tone: "error",
+        title: "Could not disconnect wallet",
+        description: res.error.message,
+        duration: 5000,
+      });
+      return false;
+    }
+    await syncProfileWallet(null);
     pushToast({
       tone: "info",
       title: "Wallet disconnected",
       duration: 3000,
     });
-  }, [pushToast, setDisconnected]);
+    return true;
+  }, [pushToast]);
 
   const refresh = useCallback(async () => {
     if (!account) return;
@@ -128,7 +137,8 @@ export function useWallet() {
     totalUsd,
     lastError,
     connect,
-    disconnect,
+    disconnect: disconnectWallet,
+    disconnectWallet,
     refresh,
   };
 }

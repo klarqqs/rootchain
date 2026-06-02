@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "npm run dev --prefix server",
+    "dev:all": "npm run dev:server & npm run dev",
+    "dev:demo": "npm run db:seed --prefix server && npm run dev:all",
     "build": "tsc -b && vite build",
+    "build:server": "npm run build --prefix server",
     "lint": "eslint .",
     "preview": "vite preview",
     "setup:env": "test -f .env || cp .env.example .env && echo 'Created .env from .env.example — add your Supabase URL and anon key, then restart npm run dev.'"
   },
   "dependencies": {
+    "@lobstrco/signer-extension-api": "^2.0.0",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.1.0",
     "@supabase/supabase-js": "^2.105.4",

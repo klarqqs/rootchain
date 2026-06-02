@@ -1,13 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { WalletAccount, WalletBalance, WalletState } from "@/types/wallet";
-import { tokens } from "@/lib/tokens";
 
-const SEED_BALANCES_FOR_DEMO: WalletBalance[] = [
-  { asset: "USDC", symbol: "USDC", amount: 28247.18, usdValue: 28247.18, chg24h: 0.01, color: "#2775CA", icon: "$" },
-  { asset: "XLM", symbol: "XLM", amount: 14820, usdValue: 14820 * 0.118, chg24h: 1.9, color: "#7D00FF", icon: "✦" },
-  { asset: "RCSHARE", symbol: "RC-SHARES", amount: 142.4, usdValue: 8420.30, chg24h: 4.2, color: "#84CC16", icon: "♢" },
-];
+export const WALLET_PERSIST_KEY = "rootchain.wallet.v1";
 
 const DEFAULT_STATE: WalletState = {
   status: "disconnected",
@@ -19,19 +14,22 @@ const DEFAULT_STATE: WalletState = {
   sessionStartedAt: null,
 };
 
+/** Remove persisted wallet session from localStorage (non-fatal if unavailable). */
+export function removeWalletFromLocalStorage(): void {
+  try {
+    localStorage.removeItem(WALLET_PERSIST_KEY);
+  } catch {
+    /* private browsing / quota */
+  }
+}
+
 interface WalletActions {
   setConnecting: () => void;
   setConnected: (account: WalletAccount, balances: WalletBalance[]) => void;
   setDisconnected: () => void;
+  disconnectWallet: () => void;
   setError: (message: string) => void;
   setBalances: (balances: WalletBalance[]) => void;
-  /**
-   * Mutate the stored balance for a single asset by `delta`. Used by the
-   * marketplace + transaction engine after a simulated transfer settles.
-   */
-  adjustBalance: (symbol: string, delta: number) => void;
-  /** Seed mock balances for demo when not hooked into a real wallet. */
-  seedDemoBalances: () => void;
   markHydrated: () => void;
 }
 
@@ -40,10 +38,9 @@ const sumUsd = (balances: WalletBalance[]) =>
 
 export const useWalletStore = create<WalletState & WalletActions>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       ...DEFAULT_STATE,
-      setConnecting: () =>
-        set({ status: "connecting", lastError: null }),
+      setConnecting: () => set({ status: "connecting", lastError: null }),
       setConnected: (account, balances) =>
         set({
           status: "connected",
@@ -62,55 +59,29 @@ export const useWalletStore = create<WalletState & WalletActions>()(
           lastError: null,
           sessionStartedAt: null,
         }),
-      setError: (message) =>
-        set({ status: "error", lastError: message }),
-      setBalances: (balances) =>
-        set({ balances, totalUsd: sumUsd(balances) }),
-      adjustBalance: (symbol, delta) => {
-        const balances = get().balances;
-        let mutated = false;
-        const next = balances.map((b) => {
-          if (b.symbol === symbol || b.asset === symbol) {
-            mutated = true;
-            const amount = Math.max(0, b.amount + delta);
-            const usd = (b.usdValue / Math.max(b.amount, 0.0001)) * amount;
-            return { ...b, amount, usdValue: usd };
-          }
-          return b;
-        });
-        if (!mutated) {
-          // Asset wasn't in the wallet — add a row so the change is visible.
-          next.push({
-            asset: symbol,
-            symbol,
-            amount: Math.max(0, delta),
-            usdValue: Math.max(0, delta) * (symbol === "USDC" ? 1 : 1),
-            chg24h: 0,
-            color: tokens.lime[500],
-            icon: symbol.charAt(0),
-          });
-        }
-        set({ balances: next, totalUsd: sumUsd(next) });
+      disconnectWallet: () => {
+        removeWalletFromLocalStorage();
+        set({ ...DEFAULT_STATE, isHydrated: true });
+        void useWalletStore.persist.clearStorage();
       },
-      seedDemoBalances: () => {
-        if (get().balances.length === 0) {
-          set({ balances: SEED_BALANCES_FOR_DEMO, totalUsd: sumUsd(SEED_BALANCES_FOR_DEMO) });
-        }
-      },
+      setError: (message) => set({ status: "error", lastError: message }),
+      setBalances: (balances) => set({ balances, totalUsd: sumUsd(balances) }),
       markHydrated: () => set({ isHydrated: true }),
     }),
     {
-      name: "rootchain.wallet.v1",
+      name: WALLET_PERSIST_KEY,
       storage: createJSONStorage(() => localStorage),
+      /** Persist session metadata only — balances always come from Horizon. */
       partialize: (state) => ({
         status: state.status,
         account: state.account,
-        balances: state.balances,
-        totalUsd: state.totalUsd,
         sessionStartedAt: state.sessionStartedAt,
       }),
       onRehydrateStorage: () => (state) => {
         state?.markHydrated();
+        if (state?.status === "connected" && state.account) {
+          state.setBalances([]);
+        }
       },
     },
   ),

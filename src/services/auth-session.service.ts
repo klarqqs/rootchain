@@ -6,6 +6,14 @@ import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import { configureAuthPersistMode } from "@/database/auth-storage";
 import { supabase } from "@/database/client";
 import type { AppProfileRow, Database } from "@/database/types";
+import { isApiBackendConfigured } from "@/lib/api/config";
+import {
+  apiLogin,
+  apiLogout,
+  apiRegister,
+  apiUserToProfile,
+} from "@/services/api-auth.service";
+import { useIdentityStore } from "@/store/identity.store";
 
 function getSupabase(): SupabaseClient<Database> {
   if (!supabase) {
@@ -161,6 +169,27 @@ export async function signInWithEmail(
   password: string,
   rememberDevice: boolean,
 ): Promise<{ session: Session | null }> {
+  if (isApiBackendConfigured()) {
+    const { user, profile } = await apiLogin(email, password);
+    const stub = {
+      access_token: "api",
+      refresh_token: "api",
+      expires_in: 3600,
+      token_type: "bearer",
+      user: {
+        id: user.id,
+        email: user.email,
+        aud: "authenticated",
+        role: "authenticated",
+        app_metadata: {},
+        user_metadata: { full_name: user.fullName, role: profile.role },
+        created_at: new Date().toISOString(),
+      },
+    } as Session;
+    useIdentityStore.getState().setAuthSnapshot({ session: stub, profile });
+    return { session: stub };
+  }
+
   configureAuthPersistMode(rememberDevice);
   const sb = getSupabase();
   const { data, error } = await sb.auth.signInWithPassword({
@@ -185,9 +214,42 @@ export async function signInWithGoogle(rememberDevice: boolean): Promise<void> {
 }
 
 export async function signOutEverywhere(): Promise<void> {
+  if (isApiBackendConfigured()) {
+    await apiLogout();
+    useIdentityStore.getState().clear();
+    return;
+  }
   if (!supabase) return;
   await supabase.auth.signOut({ scope: "global" });
 }
+
+/** Password registration when Railway API is enabled (signup security step). */
+export async function registerWithEmailApi(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  role: "INVESTOR" | "FARMER";
+}): Promise<void> {
+  const { user, profile } = await apiRegister(input);
+  const stub = {
+    access_token: "api",
+    refresh_token: "api",
+    expires_in: 3600,
+    token_type: "bearer",
+    user: {
+      id: user.id,
+      email: user.email,
+      aud: "authenticated",
+      role: "authenticated",
+      app_metadata: {},
+      user_metadata: { full_name: user.fullName, role: profile.role },
+      created_at: new Date().toISOString(),
+    },
+  } as Session;
+  useIdentityStore.getState().setAuthSnapshot({ session: stub, profile });
+}
+
+export { apiUserToProfile };
 
 export async function requestPasswordReset(email: string): Promise<void> {
   const sb = getSupabase();

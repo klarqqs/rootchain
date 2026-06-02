@@ -1,4 +1,6 @@
 export { useWallet } from "./use-wallet";
+export { useMarketplaceListings } from "./use-marketplace-listings";
+export { useMarketplaceTransactions } from "./use-marketplace-transactions";
 export { useToast } from "./use-toast";
 export { useTransactions, useTransaction } from "./use-transactions";
 export { usePortfolio } from "./use-portfolio";

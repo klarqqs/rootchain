@@ -4,6 +4,9 @@
 >
 > **Phase 1** — Premium UI/UX Foundation (complete).
 > **Phase 2** — Safe backend foundation + Stellar Testnet integration (complete).
+> **Phase 3** — Production layer: AI risk, transparency, realtime, analytics, DevOps (see [PRODUCTION.md](./PRODUCTION.md)).
+
+**Product vision:** [PRODUCT.md](./PRODUCT.md) · **System design:** [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 A premium AgriFi marketplace UI inspired by **Stripe · Coinbase · Linear · Vercel · Apple**. Every component is hand-crafted, animated, responsive, and modular.
 

@@ -12,7 +12,7 @@ export async function persistInvestment(
   if (!supabase) return;
   const db = supabase as any;
 
-  const { error } = await db.from("investments").upsert(
+  const { error } = await db.from("ledger_investments").upsert(
     {
       stellar_address: stellarAddress,
       stellar_tx_hash: txHash,
@@ -35,7 +35,7 @@ export async function getInvestments(stellarAddress: string): Promise<Investment
   if (!supabase) return [];
   const db = supabase as any;
   const { data } = await db
-    .from("investments")
+    .from("ledger_investments")
     .select("*")
     .eq("stellar_address", stellarAddress)
     .order("opened_at", { ascending: false });
@@ -46,7 +46,7 @@ export async function closeInvestment(txHash: string, realizedRoi: number): Prom
   if (!supabase) return;
   const db = supabase as any;
   await db
-    .from("investments")
+    .from("ledger_investments")
     .update({ status: "closed", realized_roi: realizedRoi, closed_at: new Date().toISOString() })
     .eq("stellar_tx_hash", txHash);
 }

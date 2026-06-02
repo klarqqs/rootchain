@@ -58,7 +58,7 @@ interface NavItem {
 
 const PRIMARY: NavItem[] = [
   { id: "home", label: "Overview", icon: HomeIcon },
-  { id: "marketplace", label: "Marketplace", icon: Store, badge: "9" },
+  { id: "marketplace", label: "Marketplace", icon: Store },
   { id: "farmers", label: "Farmers", icon: Users },
   { id: "verification", label: "Verification", icon: ShieldCheck },
   { id: "dashboard", label: "Analytics", icon: LineChartIcon },
@@ -91,7 +91,7 @@ const TOOLS: { label: string; icon: LucideIcon; action: SidebarToolAction }[] = 
 ];
 
 export function Sidebar({ page, setPage, open, setOpen, onConnectWallet, onToolAction }: SidebarProps) {
-  const { isConnected, account, balances, totalUsd } = useWallet();
+  const { isConnected, account, balances, totalUsd, disconnectWallet } = useWallet();
   const enforced = isSupabaseAuthEnforced();
   const authReady = useIdentityStore((s) => s.hydration === "ready");
   const signedIn = useIdentityStore((s) => !!s.session?.user);
@@ -206,7 +206,7 @@ export function Sidebar({ page, setPage, open, setOpen, onConnectWallet, onToolA
           </div>
           {RESOURCE_LINKS.map((it) => {
             if (it.id === "login" || it.id === "signup") {
-              if (!authReady || signedIn) return null;
+              if (!enforced || !authReady || signedIn) return null;
             }
             if (it.id === "account") {
               if (!authReady || !signedIn) return null;
@@ -279,6 +279,13 @@ export function Sidebar({ page, setPage, open, setOpen, onConnectWallet, onToolA
                   OPEN <ChevronUp className="w-3 h-3 rotate-90" />
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => void disconnectWallet()}
+                className="touch-manipulation mt-2 w-full py-1.5 rounded-lg border border-rose-500/25 text-rose-200/90 text-[10px] font-bold hover:bg-rose-500/10 transition min-h-[36px]"
+              >
+                Disconnect Wallet
+              </button>
             </Glass>
           ) : (
             <Glass className="p-3 text-center" glow>

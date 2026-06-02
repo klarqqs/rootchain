@@ -1,9 +1,4 @@
-export type WalletProviderId =
-  | "freighter"
-  | "albedo"
-  | "xbull"
-  | "walletconnect"
-  | "ledger";
+export type WalletProviderId = "freighter" | "lobstr";
 
 export type WalletStatus =
   | "disconnected"

@@ -1,11 +1,7 @@
 /**
  * Transaction service — Phase 3 upgrade.
  *
- * All public functions now route through `tx-dispatch.ts` which decides:
- *   Freighter connected → executeRealTx() (real Stellar testnet)
- *   Any other provider  → simulateTx()   (local simulation)
- *
- * The API surface is unchanged; callers get the same handle shape.
+ * All public functions route through `tx-dispatch.ts` for real Stellar settlement.
  */
 
 import type { TxKind, TxPaymentPresentation, TxRecord } from "@/types/transaction";
@@ -135,7 +131,7 @@ export function submitTransaction(
 
     if (record.status === "broadcasting" || (record.status === "pending" && record.confirmations === 1)) {
       updateToast(toastId, {
-        title: ledgerExecutionPath ? "Broadcasted to Stellar testnet" : "Transaction broadcasted",
+        title: ledgerExecutionPath ? "Broadcasted to Stellar" : "Transaction broadcasted",
         description: shortHash(record.hash),
         tone: "info",
       });
@@ -169,7 +165,7 @@ export function submitTransaction(
               title: record.produceName
                 ? `Ownership recorded · ${record.produceName}`
                 : `Investment escrow locked`,
-              body: `${ledgerExecutionPath ? "Anchored on Stellar (testnet)" : "Settlement simulated"} · ${shortHash(record.hash)}`,
+              body: `${ledgerExecutionPath ? "Anchored on Stellar Mainnet" : "Settlement pending"} · ${shortHash(record.hash)}`,
               meta: { txHash: record.hash, produceId: record.produceId },
             }
           : kind === "CLAIM"
@@ -225,7 +221,6 @@ export function submitTransaction(
 }
 
 export function submitInvestment(args: InvestArgs): TxHandle {
-  const { adjustBalance } = useWalletStore.getState();
   return submitTransaction(
     "INVEST",
     {
@@ -234,60 +229,26 @@ export function submitInvestment(args: InvestArgs): TxHandle {
       produceName: args.produceName,
       receivedAsset: { symbol: "RCSHARE", amount: args.shares },
     },
-    (record, ctx) => {
-      if (record.status !== "confirmed" || ctx.ledgerExecution) return;
-      adjustBalance("USDC", -args.amount);
-      adjustBalance("RCSHARE", args.shares);
-    },
   );
 }
 
 export function submitClaim(args: ClaimArgs): TxHandle {
-  const { adjustBalance } = useWalletStore.getState();
-  return submitTransaction(
-    "CLAIM",
-    {
-      amount: args.amount,
-      produceId: args.produceId,
-      produceName: args.produceName,
-    },
-    (record, ctx) => {
-      if (record.status !== "confirmed" || ctx.ledgerExecution) return;
-      adjustBalance("USDC", args.amount);
-    },
-  );
+  return submitTransaction("CLAIM", {
+    amount: args.amount,
+    produceId: args.produceId,
+    produceName: args.produceName,
+  });
 }
 
 export function submitTransfer(args: TransferArgs): TxHandle {
-  const { adjustBalance } = useWalletStore.getState();
-  return submitTransaction(
-    "TRANSFER",
-    {
-      amount: args.amount,
-      counterparty: args.destination,
-      memo: args.memo,
-      paymentPresentation: args.paymentPresentation ?? "usd_notional",
-    },
-    (record, ctx) => {
-      if (record.status !== "confirmed" || ctx.ledgerExecution) return;
-      const pres = args.paymentPresentation ?? "usd_notional";
-      if (pres === "native_xlm") {
-        adjustBalance("XLM", -args.amount);
-      } else {
-        adjustBalance("USDC", -args.amount);
-      }
-    },
-  );
+  return submitTransaction("TRANSFER", {
+    amount: args.amount,
+    counterparty: args.destination,
+    memo: args.memo,
+    paymentPresentation: args.paymentPresentation ?? "usd_notional",
+  });
 }
 
 export function submitDeposit(args: DepositArgs): TxHandle {
-  const { adjustBalance } = useWalletStore.getState();
-  return submitTransaction(
-    "DEPOSIT",
-    { amount: args.amount, memo: args.memo },
-    (record, ctx) => {
-      if (record.status !== "confirmed" || ctx.ledgerExecution) return;
-      adjustBalance("USDC", args.amount);
-    },
-  );
+  return submitTransaction("DEPOSIT", { amount: args.amount, memo: args.memo });
 }

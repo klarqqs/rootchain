@@ -79,7 +79,7 @@ export function InvestModal({ open, onClose, item, onTxComplete }: InvestModalPr
     }
     if (realSettlementRequired && !canExecuteReal()) {
       setErrorMessage(
-        "Production mode requires Freighter for on-chain settlement. Connect Freighter (not a demo wallet provider).",
+        "Production mode requires Freighter or LOBSTR for on-chain settlement. Connect a real Stellar wallet extension.",
       );
       setStage("error");
       return;

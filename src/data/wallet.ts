@@ -26,46 +26,26 @@ export interface WalletProvider {
   color: string;
   popular?: boolean;
   recommended?: boolean;
-  type: "Stellar" | "EVM" | "Hardware" | "Multi-chain";
+  type: "Stellar";
 }
 
+/** Real Stellar wallet providers — no simulated or demo connections. */
 export const WALLET_PROVIDERS: WalletProvider[] = [
   {
     id: "freighter",
     name: "Freighter",
-    desc: "Native Stellar wallet · USDC settlement",
+    desc: "Stellar browser extension · primary wallet",
     color: "#7D00FF",
     type: "Stellar",
     recommended: true,
   },
   {
-    id: "albedo",
-    name: "Albedo",
-    desc: "Browser-based Stellar signer · no install",
-    color: "#FF6B35",
-    type: "Stellar",
-  },
-  {
-    id: "xbull",
-    name: "xBull",
-    desc: "Mobile-first Stellar wallet · biometric",
-    color: "#00B894",
+    id: "lobstr",
+    name: "LOBSTR",
+    desc: "LOBSTR signer extension · mobile wallet pairing",
+    color: "#0197F6",
     type: "Stellar",
     popular: true,
-  },
-  {
-    id: "walletconnect",
-    name: "WalletConnect",
-    desc: "Preparing paired signing (set VITE_WALLETCONNECT_PROJECT_ID). Freighter ships live testnet txs today.",
-    color: "#3B99FC",
-    type: "Multi-chain",
-  },
-  {
-    id: "ledger",
-    name: "Ledger",
-    desc: "Hardware-secured signing",
-    color: "#000000",
-    type: "Hardware",
   },
 ];
 

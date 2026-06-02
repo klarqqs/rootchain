@@ -1,0 +1,404 @@
+// Rootchain — Railway PostgreSQL schema
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  INVESTOR
+  FARMER
+  ADMIN
+}
+
+enum FarmerVerificationStatus {
+  PENDING
+  SUBMITTED
+  VERIFIED
+  REJECTED
+}
+
+enum ProjectStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  FUNDED
+  CLOSED
+  CANCELLED
+  REJECTED
+}
+
+enum InvestmentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum AdminReviewTarget {
+  FARMER
+  PROJECT
+}
+
+enum AdminReviewDecision {
+  APPROVED
+  REJECTED
+}
+
+enum StellarNetwork {
+  TESTNET
+  MAINNET
+}
+
+enum DocumentType {
+  NATIONAL_ID
+  LAND_TITLE
+  FARM_PLAN
+  LAND_PHOTO
+  OTHER
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum ProjectUpdateType {
+  GENERAL
+  MILESTONE
+  HARVEST
+}
+
+enum NotificationType {
+  INVESTMENT
+  TRANSACTION
+  PROJECT
+  MILESTONE
+  ADMIN
+  SYSTEM
+}
+
+enum ActivityVisibility {
+  PUBLIC
+  INVESTORS
+  ADMIN
+}
+
+enum ActivityType {
+  INVESTMENT_CONFIRMED
+  PROJECT_UPDATE
+  PROJECT_SUBMITTED
+  PROJECT_APPROVED
+  PROJECT_FUNDED
+  FARMER_VERIFIED
+  ADMIN_REVIEW
+  FUNDING_PROGRESS
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role
+  fullName     String   @map("full_name")
+  avatarUrl    String?  @map("avatar_url")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  wallet              Wallet?
+  farmerProfile       FarmerProfile?
+  farms               Farm[]
+  investments         Investment[]
+  transactions        Transaction[]
+  projectUpdates      ProjectUpdate[] @relation("UpdateAuthor")
+  adminReviews        AdminReview[]   @relation("Reviewer")
+  auditLogs           AuditLog[]      @relation("Actor")
+  refreshTokens       RefreshToken[]
+  notifications       Notification[]
+  activities          PlatformActivity[] @relation("ActivityActor")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Wallet {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @unique @map("user_id") @db.Uuid
+  publicKey String         @unique @map("public_key")
+  network   StellarNetwork @default(TESTNET)
+  /// Custodial only — encrypt with KMS in production; null for connect-only wallets
+  encryptedSecret String?  @map("encrypted_secret")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([publicKey])
+  @@map("wallets")
+}
+
+model FarmerProfile {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  userId             String                   @unique @map("user_id") @db.Uuid
+  displayName        String                   @map("display_name")
+  location           String                   @default("")
+  bio                String?
+  verificationStatus FarmerVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?                @map("verified_at")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents  VerificationDocument[]
+  projects   Project[]
+
+  @@map("farmer_profiles")
+}
+
+model Farm {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  name      String
+  location  String
+  sizeHectares Decimal? @map("size_hectares") @db.Decimal(10, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner    User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@index([ownerId])
+  @@map("farms")
+}
+
+model Project {
+  id            String        @id @default(uuid()) @db.Uuid
+  farmerId      String        @map("farmer_id") @db.Uuid
+  farmId        String?       @map("farm_id") @db.Uuid
+  title         String
+  description   String        @default("")
+  cropType      String        @default("other") @map("crop_type")
+  location      String        @default("")
+  targetAmount  Decimal       @map("target_amount") @db.Decimal(18, 2)
+  raisedAmount  Decimal       @default(0) @map("raised_amount") @db.Decimal(18, 2)
+  expectedRoiPct Decimal      @default(0) @map("expected_roi_pct") @db.Decimal(5, 2)
+  riskLevel     RiskLevel     @default(MEDIUM) @map("risk_level")
+  aiScore       Decimal?      @map("ai_score") @db.Decimal(5, 2)
+  trustScore    Decimal?      @map("trust_score") @db.Decimal(5, 2)
+  predictedRoiPct Decimal?    @map("predicted_roi_pct") @db.Decimal(5, 2)
+  aiFactors     Json?           @map("ai_factors") @db.JsonB
+  harvestTimeline String?     @map("harvest_timeline")
+  startDate     DateTime      @map("start_date") @db.Date
+  endDate       DateTime      @map("end_date") @db.Date
+  status        ProjectStatus @default(DRAFT)
+  rejectionNote String?       @map("rejection_note")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  farmer       FarmerProfile   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  farm         Farm?           @relation(fields: [farmId], references: [id], onDelete: SetNull)
+  media        ProjectMedia[]
+  investments  Investment[]
+  transactions Transaction[]
+  updates      ProjectUpdate[]
+  adminReviews AdminReview[]
+  activities   PlatformActivity[]
+
+  @@index([farmerId])
+  @@index([status])
+  @@map("projects")
+}
+
+model ProjectMedia {
+  id        String    @id @default(uuid()) @db.Uuid
+  projectId String    @map("project_id") @db.Uuid
+  kind      MediaKind @default(IMAGE)
+  url       String
+  mimeType  String?   @map("mime_type")
+  caption   String?
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_media")
+}
+
+model VerificationDocument {
+  id         String       @id @default(uuid()) @db.Uuid
+  farmerId   String       @map("farmer_id") @db.Uuid
+  type       DocumentType
+  url        String
+  fileName   String?      @map("file_name")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  farmer FarmerProfile @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  @@index([farmerId])
+  @@map("verification_documents")
+}
+
+model Investment {
+  id            String           @id @default(uuid()) @db.Uuid
+  userId        String           @map("user_id") @db.Uuid
+  projectId     String           @map("project_id") @db.Uuid
+  amount        Decimal          @db.Decimal(18, 2)
+  status        InvestmentStatus @default(PENDING)
+  stellarTxHash String?          @unique @map("stellar_tx_hash")
+  walletAddress String?          @map("wallet_address")
+  preparedXdr   String?          @map("prepared_xdr")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  transaction Transaction?
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+  @@map("investments")
+}
+
+model Transaction {
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @map("user_id") @db.Uuid
+  projectId     String            @map("project_id") @db.Uuid
+  investmentId  String?           @unique @map("investment_id") @db.Uuid
+  amount        Decimal           @db.Decimal(18, 2)
+  status        TransactionStatus @default(PENDING)
+  walletAddress String?           @map("wallet_address")
+  stellarTxHash String?           @map("stellar_tx_hash")
+  preparedXdr   String?           @map("prepared_xdr")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  investment Investment? @relation(fields: [investmentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model ProjectUpdate {
+  id        String            @id @default(uuid()) @db.Uuid
+  projectId String            @map("project_id") @db.Uuid
+  authorId  String            @map("author_id") @db.Uuid
+  updateType ProjectUpdateType @default(GENERAL) @map("update_type")
+  title     String?
+  body      String
+  mediaUrl  String?           @map("media_url")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User    @relation("UpdateAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_updates")
+}
+
+model AdminReview {
+  id         String              @id @default(uuid()) @db.Uuid
+  targetType AdminReviewTarget   @map("target_type")
+  farmerId   String?             @map("farmer_id") @db.Uuid
+  projectId  String?             @map("project_id") @db.Uuid
+  reviewerId String              @map("reviewer_id") @db.Uuid
+  decision   AdminReviewDecision
+  notes      String?
+  createdAt  DateTime            @default(now()) @map("created_at")
+
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer User     @relation("Reviewer", fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([reviewerId])
+  @@map("admin_reviews")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?    @db.JsonB
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("Actor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  metadata  Json?            @db.JsonB
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model PlatformActivity {
+  id         String             @id @default(uuid()) @db.Uuid
+  type       ActivityType
+  title      String
+  summary    String
+  visibility ActivityVisibility @default(PUBLIC)
+  projectId  String?            @map("project_id") @db.Uuid
+  actorId    String?            @map("actor_id") @db.Uuid
+  metadata   Json?              @db.JsonB
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  actor   User?    @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([createdAt])
+  @@index([type])
+  @@map("platform_activities")
+}

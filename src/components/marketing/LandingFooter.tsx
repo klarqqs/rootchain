@@ -3,13 +3,13 @@ import type { Page } from "@/lib/nav";
 
 export interface LandingFooterProps {
   setPage: (p: Page) => void;
-  /** When set, footer CTAs open the investor/farmer chooser instead of jumping straight to signup. */
   requestGetStarted?: () => void;
+  authEnforced?: boolean;
 }
 
 const link = "text-sm text-slate-500 hover:text-emerald-300/90 transition-colors";
 
-export function LandingFooter({ setPage, requestGetStarted }: LandingFooterProps) {
+export function LandingFooter({ setPage, requestGetStarted, authEnforced }: LandingFooterProps) {
   return (
     <footer
       className="border-t border-white/[0.06] mt-auto"
@@ -54,7 +54,13 @@ export function LandingFooter({ setPage, requestGetStarted }: LandingFooterProps
                 <button
                   type="button"
                   className={link}
-                  onClick={() => (requestGetStarted ? requestGetStarted() : setPage("signup"))}
+                  onClick={() =>
+                    requestGetStarted
+                      ? requestGetStarted()
+                      : authEnforced
+                        ? setPage("signup")
+                        : setPage("marketplace")
+                  }
                 >
                   Investors
                 </button>
